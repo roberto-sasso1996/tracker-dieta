@@ -213,6 +213,9 @@ function openWorkoutDetail(w) {
   document.getElementById("detailTitle").textContent = dateLabel;
 
   let html = "";
+  if (w.totalKcal) {
+    html += `<div class="tile-stat" style="font-size:1.3rem; margin-bottom:2px;">${w.totalKcal}</div><div class="tile-stat-label" style="margin-bottom:12px;">kcal totali sessione</div>`;
+  }
   (w.exercises || []).forEach((ex) => {
     let setsHtml = "";
     (ex.sets || []).forEach((s, i) => {
@@ -573,6 +576,7 @@ async function loadDashboard(uid) {
         const metaParts = [];
         if ((w.exercises || []).length) metaParts.push(`${w.exercises.length} esercizi`);
         if ((w.cardio || []).length) metaParts.push(`${w.cardio.length} cardio`);
+        if (w.totalKcal) metaParts.push(`${w.totalKcal} kcal totali`);
         workoutList.innerHTML += `
           <div class="meal-entry" data-workout-id="${w.id}" style="cursor:pointer;">
             <div class="meal-body">

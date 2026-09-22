@@ -57,6 +57,7 @@ users/{uid}/workouts/{id}
   date: "YYYY-MM-DD"
   exercises: [{ name, sets: [{ reps, weight }] }]
   cardio: [{ activity, distanceKm, durationMin, speedKmh, kcal }]   // speedKmh calcolata client-side da distanza/durata
+  totalKcal: number   // kcal totali dell'intera sessione (pesi e/o cardio insieme), manuale, tipicamente dallo smartwatch dell'utente — diverso da cardio[].kcal che è per singola attività
   notes: string
   createdAt: timestamp
 

@@ -100,6 +100,7 @@ users/{uid}/workouts/{id}
   date: "YYYY-MM-DD"
   exercises: [{ name, sets: [{ reps, weight }] }]
   cardio: [{ activity, distanceKm, durationMin, speedKmh, kcal }]
+  totalKcal: number   // kcal totali dell'intera sessione, manuale (es. dallo smartwatch)
   notes: string
   createdAt: timestamp
 
@@ -116,7 +117,8 @@ users/{uid}/meals/{id}
 
 ## 5. Funzionalità aggiuntive
 
-- **Cardio**: oltre agli esercizi con pesi, ogni allenamento può includere sessioni cardio/sport (corsa, nuoto, ciclismo, ecc.) con distanza, durata e kcal bruciate — stimabili anche con l'AI (testo, non foto) usando i dati del tuo profilo se li hai impostati.
+- **Cardio**: oltre agli esercizi con pesi, ogni allenamento può includere sessioni cardio/sport (corsa, nuoto, ciclismo, ecc.) con distanza, durata e kcal bruciate — stimabili anche con l'AI (testo, non foto) usando i dati del tuo profilo se li hai impostati. Un allenamento può contenere solo cardio (nei giorni in cui non vai in palestra) o solo pesi o entrambi.
+- **Kcal totali sessione**: campo separato dalle kcal per singola attività cardio — il totale bruciato in tutta la sessione (pesi, cardio o entrambi), da inserire a mano leggendolo dal tuo smartwatch.
 - **Esercizi personalizzati**: in Palestra, il nome dell'esercizio si sceglie da un menu a tendina (niente da riscrivere ogni volta) con opzione per aggiungerne uno nuovo al volo — che poi resta salvato per le prossime volte. Gestione completa (rinomina, elimina, aggiungi) in Home → Impostazioni → "I tuoi esercizi".
 - **Profilo utente**: peso, età, altezza e foto profilo, impostabili dalla Home → Impostazioni. Alimentano le stime AI (es. kcal bruciate) per risultati più precisi.
 - **Obiettivo calorico/macro giornaliero**: impostabile in Home → Impostazioni; la pagina Pasti (e la dashboard, per le kcal) mostrano una barra di progresso rispetto al consumato del giorno.

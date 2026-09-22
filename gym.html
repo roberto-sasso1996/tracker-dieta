@@ -65,7 +65,15 @@
       La stima AI delle kcal usa peso/età/altezza dal tuo profilo (Home → Impostazioni), se li hai inseriti.
     </p>
 
-    <div class="field" style="margin-top:16px;">
+    <div class="field" style="margin-top:16px; max-width:160px;">
+      <label for="wTotalKcal">Kcal totali sessione</label>
+      <input type="number" id="wTotalKcal" min="0" step="1" placeholder="dal tuo orologio">
+    </div>
+    <p style="font-size:0.78rem; color:var(--text-faint); margin-top:-10px; margin-bottom:16px;">
+      Facoltativo: il totale bruciato in tutta la sessione (pesi, cardio o entrambi), letto dal tuo smartwatch. Diverso dalle kcal per singola attività cardio qui sopra.
+    </p>
+
+    <div class="field">
       <label for="wNotes">Note (opzionale)</label>
       <textarea id="wNotes" placeholder="Sensazioni, recupero, variazioni…"></textarea>
     </div>
@@ -174,6 +182,7 @@ async function loadWorkouts() {
     const metaParts = [];
     if ((w.exercises || []).length) metaParts.push(`${w.exercises.length} esercizi`);
     if ((w.cardio || []).length) metaParts.push(`${w.cardio.length} cardio`);
+    if (w.totalKcal) metaParts.push(`${w.totalKcal} kcal totali`);
 
     listEl.innerHTML += `
       <div class="day-group">
@@ -218,6 +227,9 @@ function openWorkoutDetail(w) {
   document.getElementById("detailTitle").textContent = dateLabel;
 
   let html = "";
+  if (w.totalKcal) {
+    html += `<div class="tile-stat" style="font-size:1.3rem; margin-bottom:2px;">${w.totalKcal}</div><div class="tile-stat-label" style="margin-bottom:12px;">kcal totali sessione</div>`;
+  }
   (w.exercises || []).forEach((ex) => {
     let setsHtml = "";
     (ex.sets || []).forEach((s, i) => {
@@ -246,15 +258,15 @@ document.getElementById("exportCsvBtn").addEventListener("click", () => {
     showToast("Nessun dato da esportare.");
     return;
   }
-  const rows = [["Data", "Tipo", "Esercizio/Attività", "Serie", "Ripetizioni", "Peso kg", "Distanza km", "Durata min", "Velocità media km/h", "Kcal", "Note"]];
+  const rows = [["Data", "Tipo", "Esercizio/Attività", "Serie", "Ripetizioni", "Peso kg", "Distanza km", "Durata min", "Velocità media km/h", "Kcal attività", "Kcal totali sessione", "Note"]];
   allWorkouts.slice().reverse().forEach((w) => {
     (w.exercises || []).forEach((ex) => {
       (ex.sets || []).forEach((s, i) => {
-        rows.push([w.date, "Pesi", ex.name, i + 1, s.reps, s.weight, "", "", "", "", w.notes || ""]);
+        rows.push([w.date, "Pesi", ex.name, i + 1, s.reps, s.weight, "", "", "", "", w.totalKcal || "", w.notes || ""]);
       });
     });
     (w.cardio || []).forEach((c) => {
-      rows.push([w.date, "Cardio", c.activity || "", "", "", "", c.distanceKm || "", c.durationMin || "", c.speedKmh || "", c.kcal || "", w.notes || ""]);
+      rows.push([w.date, "Cardio", c.activity || "", "", "", "", c.distanceKm || "", c.durationMin || "", c.speedKmh || "", c.kcal || "", w.totalKcal || "", w.notes || ""]);
     });
   });
   downloadCsv(`allenamenti_${todayStr()}.csv`, rows);
@@ -267,6 +279,7 @@ document.getElementById("addBtn").addEventListener("click", () => {
   document.getElementById("wDate").value = todayStr();
   document.getElementById("exerciseContainer").innerHTML = "";
   document.getElementById("cardioContainer").innerHTML = "";
+  document.getElementById("wTotalKcal").value = "";
   document.getElementById("wNotes").value = "";
   document.getElementById("wError").style.display = "none";
   exerciseIdCounter = 0;
@@ -434,6 +447,7 @@ function addCardioBlock() {
 
 document.getElementById("saveWorkoutBtn").addEventListener("click", async () => {
   const date = document.getElementById("wDate").value;
+  const totalKcal = Number(document.getElementById("wTotalKcal").value) || 0;
   const notes = document.getElementById("wNotes").value.trim();
   const errEl = document.getElementById("wError");
   errEl.style.display = "none";
@@ -484,7 +498,7 @@ document.getElementById("saveWorkoutBtn").addEventListener("click", async () => 
 
   try {
     await addDoc(collection(db, "users", currentUser.uid, "workouts"), {
-      date, exercises, cardio, notes, createdAt: serverTimestamp()
+      date, exercises, cardio, totalKcal, notes, createdAt: serverTimestamp()
     });
 
     // esercizi scritti a mano (non scelti dal menu): li aggiungo alla lista personale per la prossima volta
