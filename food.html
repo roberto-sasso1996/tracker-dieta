@@ -134,6 +134,17 @@
   </div>
 </div>
 
+<!-- ---------- SHEET DETTAGLIO PASTO ---------- -->
+<div class="sheet-backdrop" id="detailBackdrop">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2 id="detailTitle">Dettaglio</h2>
+      <button class="icon-btn" id="closeDetail">✕</button>
+    </div>
+    <div id="detailBody"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script type="module">
@@ -157,6 +168,25 @@ function todayStr() { return new Date().toISOString().slice(0, 10); }
 
 function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+// ---- sheet dettaglio pasto (al click su una card) ----
+const detailBackdrop = document.getElementById("detailBackdrop");
+document.getElementById("closeDetail").addEventListener("click", () => detailBackdrop.classList.remove("open"));
+detailBackdrop.addEventListener("click", (e) => { if (e.target === detailBackdrop) detailBackdrop.classList.remove("open"); });
+
+function openMealDetail(m) {
+  document.getElementById("detailTitle").textContent = m.mealType || "Pasto";
+  document.getElementById("detailBody").innerHTML = `
+    ${m.photoData ? `<img src="${m.photoData}" style="width:100%; border-radius:var(--radius-sm); margin-bottom:14px;" alt="">` : ""}
+    <p style="margin-bottom:16px; color:var(--text-dim);">${escapeHtml(m.description || "Nessuna descrizione.")}</p>
+    <div class="macro-grid" style="margin-bottom:0; text-align:center;">
+      <div><div class="tile-stat" style="font-size:1.3rem;">${Math.round(m.macros?.calories || 0)}</div><div class="tile-stat-label">kcal</div></div>
+      <div><div class="tile-stat" style="font-size:1.3rem;">${Math.round(m.macros?.protein_g || 0)}g</div><div class="tile-stat-label">proteine</div></div>
+      <div><div class="tile-stat" style="font-size:1.3rem;">${Math.round(m.macros?.carbs_g || 0)}g</div><div class="tile-stat-label">carbo</div></div>
+      <div><div class="tile-stat" style="font-size:1.3rem;">${Math.round(m.macros?.fat_g || 0)}g</div><div class="tile-stat-label">grassi</div></div>
+    </div>`;
+  detailBackdrop.classList.add("open");
 }
 
 function showToast(msg) {
@@ -305,12 +335,13 @@ async function loadDay(dateStr) {
   }
 
   let totalCal = 0, totalP = 0, totalC = 0, totalF = 0;
+  let docs = [];
 
   if (snap.empty) {
     listEl.innerHTML = '<div class="empty-state">Nessun pasto per questo giorno.</div>';
   } else {
     listEl.innerHTML = "";
-    const docs = snap.docs.slice().sort((a, b) => {
+    docs = snap.docs.slice().sort((a, b) => {
       const ta = a.data().createdAt?.toMillis?.() ?? 0;
       const tb = b.data().createdAt?.toMillis?.() ?? 0;
       return ta - tb;
@@ -324,7 +355,7 @@ async function loadDay(dateStr) {
       totalF += m.macros?.fat_g || 0;
 
       listEl.innerHTML += `
-        <div class="meal-entry">
+        <div class="meal-entry" data-meal-id="${id}" style="cursor:pointer;">
           <img src="${m.photoData || ''}" alt="">
           <div class="meal-body">
             <div class="meal-type">${escapeHtml(m.mealType || '')}</div>
@@ -348,11 +379,16 @@ async function loadDay(dateStr) {
   renderGoalProgress(totalCal, totalP, totalC, totalF);
 
   listEl.querySelectorAll("[data-del]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
       if (!confirm("Eliminare questo pasto?")) return;
       await deleteDoc(doc(db, "users", currentUser.uid, "meals", btn.dataset.del));
       loadDay(document.getElementById("dayPicker").value);
     });
+  });
+
+  listEl.querySelectorAll("[data-meal-id]").forEach((el, i) => {
+    el.addEventListener("click", () => openMealDetail(docs[i].data()));
   });
 }
 

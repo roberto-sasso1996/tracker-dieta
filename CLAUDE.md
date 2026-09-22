@@ -25,7 +25,7 @@ Queste sono scelte deliberate, non dimenticanze. Se sembrano subottimali, il mot
 ## Struttura file
 
 ```
-index.html        login/registrazione + dashboard (allenamento di oggi, pasti di oggi — card cliccabili che aprono uno sheet di dettaglio condiviso, tile Palestra/Pasti, sheet Impostazioni)
+index.html        login/registrazione + dashboard (allenamento di oggi, pasti di oggi, tile Palestra/Pasti, sheet Impostazioni)
 gym.html           storico allenamenti + form dinamico esercizi/serie/carichi (pesi) e sessioni cardio (distanza/durata/kcal)
 food.html          diario pasti: cattura foto → compressione → analisi AI opzionale (foto e/o testo) → macro editabili → salvataggio; più sezione Andamento (grafici Chart.js kcal/macro per 10/20/30/60 giorni + export CSV aggregato per giorno)
 css/style.css      design system via CSS var: --gym (corallo) e --food (verde salvia) come accenti funzionali
@@ -77,7 +77,9 @@ users/{uid}/meals/{id}
 
 ## Estensioni implementate
 
-Grafico progressione carichi per esercizio (Chart.js, in `gym.html`), obiettivo calorico/macro giornaliero con barra di progresso (`dailyGoal` nel profilo, mostrato in `food.html` e nella dashboard), export CSV dello storico (`js/csv-utils.js`, bottoni in `gym.html`/`food.html`), dashboard con allenamento+pasti di oggi e sheet di dettaglio al click (`index.html`), sezione Andamento in `food.html` con grafici kcal/macro per periodo (10/20/30/60gg) ed export CSV aggregato per giorno.
+Grafico progressione carichi per esercizio (Chart.js, in `gym.html`), obiettivo calorico/macro giornaliero con barra di progresso (`dailyGoal` nel profilo, mostrato in `food.html` e nella dashboard), export CSV dello storico (`js/csv-utils.js`, bottoni in `gym.html`/`food.html`), dashboard con allenamento+pasti di oggi (`index.html`), sezione Andamento in `food.html` con grafici kcal/macro per periodo (10/20/30/60gg) ed export CSV aggregato per giorno.
+
+**Sheet di dettaglio al click su una card** (pasto o allenamento): implementato separatamente in ciascuna delle tre pagine (`index.html`, `gym.html`, `food.html`) — ognuna ha il proprio `#detailBackdrop`/`openMealDetail`/`openWorkoutDetail`, non è un componente condiviso (nessun sistema di import di componenti in un progetto senza build step). Se lo modifichi in una pagina, replica la modifica nelle altre se serve coerenza.
 
 ## Estensioni proposte ma non implementate
 
