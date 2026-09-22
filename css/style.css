@@ -385,7 +385,30 @@ main {
   gap: 8px;
   margin-bottom: 10px;
 }
-.exercise-block .ex-head input { flex: 1; }
+.exercise-block .ex-head input,
+.exercise-block .ex-head select {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  color: var(--text);
+}
+
+.exercise-list-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.exercise-list-row input {
+  flex: 1;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  color: var(--text);
+}
 .set-input-row {
   display: flex;
   gap: 8px;

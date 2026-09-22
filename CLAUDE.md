@@ -33,7 +33,7 @@ js/firebase-init.js  init Firebase + config (già compilata)
 js/auth.js         login/registrazione/logout + requireAuth() come guardia di route sulle pagine protette
 js/image-utils.js  compressImage(file) → {dataUrl, base64, mediaType, approxBytes}
 js/ai-vision.js    estimateMacros({base64, mediaType, description}) → foto e/o testo (almeno uno dei due), il testo integra/sostituisce la foto come contesto per Claude; estimateKcalForActivity(activity, durationMin, distanceKm, profile) → Claude testuale, stima kcal via MET usando il profilo utente se disponibile (altrimenti adulto medio ~70kg)
-js/profile.js      getProfile(uid) / saveProfile(uid, fields) → users/{uid}/profile/data (peso/età/altezza/foto profilo/obiettivo giornaliero)
+js/profile.js      getProfile(uid) / saveProfile(uid, fields) → users/{uid}/profile/data (peso/età/altezza/foto profilo/obiettivo giornaliero/elenco esercizi personalizzato)
 js/csv-utils.js    downloadCsv(filename, rows) → export CSV lato client (Blob + <a download>), usato da gym.html e food.html
 icons/              apple-touch-icon.png (180x180), icon-512.png, favicon-32.png — generate con `sips` da un'immagine sorgente 1024x1024 fornita dall'utente, nessuna dipendenza aggiunta
 README.md          istruzioni di setup complete (Firebase, API key, deploy) — utili anche a te per capire il "perché"
@@ -50,6 +50,7 @@ users/{uid}/profile/data             // documento singolo: profilo utente
   heightCm: number
   photoData: string   // data URL base64, foto profilo compressa (stesso schema delle foto pasto)
   dailyGoal: { calories, protein_g, carbs_g, fat_g }   // obiettivo giornaliero, opzionale, alimenta le barre di progresso
+  exerciseList: string[]   // esercizi personalizzati dell'utente, gestiti da Impostazioni; popolano il menu a tendina in gym.html e si auto-aggiornano quando l'utente scrive un nome nuovo lì
   updatedAt: timestamp
 
 users/{uid}/workouts/{id}
@@ -78,6 +79,8 @@ users/{uid}/meals/{id}
 ## Estensioni implementate
 
 Obiettivo calorico/macro giornaliero con barra di progresso (`dailyGoal` nel profilo, mostrato in `food.html` e nella dashboard), export CSV dello storico (`js/csv-utils.js`, bottoni in `gym.html`/`food.html`), dashboard con allenamento+pasti di oggi (`index.html`), sezione Andamento in `food.html` con grafici kcal/macro per periodo (10/20/30/60gg) ed export CSV aggregato per giorno.
+
+**Esercizi personalizzati** (`gym.html` + Impostazioni in `index.html`): in "Nuovo allenamento" il nome esercizio è un `<select>` popolato da `currentProfile.exerciseList`, con opzione "+ Nuovo esercizio…" che rivela un input di testo libero (toggle `select`/`input` via proprietà `.hidden`, non `style.display` — mai mischiare i due sullo stesso elemento, l'inline style vince sempre sull'attributo `hidden` e lo rende inefficace). Un nome scritto a mano viene aggiunto automaticamente a `exerciseList` al salvataggio dell'allenamento (dedup case-insensitive), così la prossima volta compare nel menu senza bisogno di passare da Impostazioni. La sezione "I tuoi esercizi" in Impostazioni permette di rinominare (inline, salva su blur) o eliminare voci esistenti, e di aggiungerne di nuove direttamente.
 
 **Sheet di dettaglio al click su una card** (pasto o allenamento): implementato separatamente in ciascuna delle tre pagine (`index.html`, `gym.html`, `food.html`) — ognuna ha il proprio `#detailBackdrop`/`openMealDetail`/`openWorkoutDetail`, non è un componente condiviso (nessun sistema di import di componenti in un progetto senza build step). Se lo modifichi in una pagina, replica la modifica nelle altre se serve coerenza.
 

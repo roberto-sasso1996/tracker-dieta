@@ -120,6 +120,23 @@
       Usati per stime più precise (es. kcal bruciate negli allenamenti cardio).
     </p>
 
+    <div class="section-title" style="margin-top:22px;">I tuoi esercizi</div>
+    <p style="font-size:0.78rem; color:var(--text-faint); margin-bottom:10px;">
+      Compaiono nel menu a tendina quando registri un allenamento in Palestra, così non devi riscriverli ogni volta. Modifica un nome direttamente qui sotto, o cancellalo con 🗑.
+    </p>
+    <div id="exerciseListRows"></div>
+    <div style="display:flex; gap:8px; margin-top:4px; margin-bottom:10px;">
+      <input type="text" id="newExerciseInput" placeholder="Nuovo esercizio (es. Panca piana)" style="flex:1; background:var(--surface-alt); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 12px; color:var(--text);">
+      <button class="btn btn-sm" id="addExerciseListBtn" style="--accent: var(--gym); width:auto; padding:10px 16px;">+ Aggiungi</button>
+    </div>
+    <button class="link-btn" id="toggleBulkAddBtn" style="color:var(--gym); margin-bottom:8px;">+ Aggiungi più esercizi insieme (uno per riga)</button>
+    <div id="bulkAddBlock" style="display:none; margin-bottom:20px;">
+      <div class="field">
+        <textarea id="bulkExerciseInput" placeholder="Un esercizio per riga, es.&#10;Chest Press&#10;Squat&#10;Leg Press 45°" style="min-height:120px;"></textarea>
+      </div>
+      <button class="btn btn-sm" id="addBulkExerciseBtn" style="--accent: var(--gym); width:100%;">Aggiungi tutti</button>
+    </div>
+
     <div class="section-title" style="margin-top:22px;">Obiettivo giornaliero</div>
     <div class="macro-grid">
       <div class="field"><label for="goalCalories">Kcal</label><input type="number" id="goalCalories" min="0" step="10"></div>
@@ -345,6 +362,9 @@ function openSettings() {
     label.textContent = "📷 Foto profilo (opzionale)";
     label.style.display = "block";
   }
+  renderExerciseList();
+  document.getElementById("bulkAddBlock").style.display = "none";
+  document.getElementById("bulkExerciseInput").value = "";
 }
 document.getElementById("settingsBtn").addEventListener("click", openSettings);
 document.getElementById("avatarImg").addEventListener("click", openSettings);
@@ -357,6 +377,96 @@ document.getElementById("saveApiKey").addEventListener("click", () => {
   localStorage.setItem("anthropic_model", document.getElementById("modelSelect").value);
   showToast("Impostazioni salvate");
   settingsBackdrop.classList.remove("open");
+});
+
+// ---- elenco esercizi personalizzato (per il menu a tendina in Palestra) ----
+function renderExerciseList() {
+  const container = document.getElementById("exerciseListRows");
+  const list = currentProfile?.exerciseList || [];
+  if (list.length === 0) {
+    container.innerHTML = '<p style="font-size:0.85rem; color:var(--text-faint); margin-bottom:0;">Nessun esercizio ancora. Aggiungine uno qui sotto.</p>';
+    return;
+  }
+  container.innerHTML = list.map((name, i) => `
+    <div class="exercise-list-row" data-idx="${i}">
+      <input type="text" class="exercise-item-input" value="${escapeHtml(name)}">
+      <button class="icon-btn exercise-item-remove" title="Elimina">🗑</button>
+    </div>`).join("");
+
+  container.querySelectorAll(".exercise-item-input").forEach((input) => {
+    input.addEventListener("blur", async () => {
+      const idx = Number(input.closest(".exercise-list-row").dataset.idx);
+      const list = [...(currentProfile?.exerciseList || [])];
+      const newVal = input.value.trim();
+      if (!newVal) { input.value = list[idx]; return; }
+      if (newVal === list[idx]) return;
+      list[idx] = newVal;
+      await persistExerciseList(list);
+    });
+  });
+
+  container.querySelectorAll(".exercise-item-remove").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const idx = Number(btn.closest(".exercise-list-row").dataset.idx);
+      const list = [...(currentProfile?.exerciseList || [])];
+      list.splice(idx, 1);
+      await persistExerciseList(list);
+    });
+  });
+}
+
+async function persistExerciseList(list) {
+  try {
+    await saveProfile(currentUser.uid, { exerciseList: list });
+    currentProfile = { ...currentProfile, exerciseList: list };
+    renderExerciseList();
+  } catch (e) {
+    showToast("Errore: " + e.message);
+  }
+}
+
+document.getElementById("addExerciseListBtn").addEventListener("click", async () => {
+  const input = document.getElementById("newExerciseInput");
+  const name = input.value.trim();
+  if (!name) return;
+  const list = [...(currentProfile?.exerciseList || [])];
+  if (list.some((n) => n.toLowerCase() === name.toLowerCase())) {
+    showToast("Esercizio già presente.");
+    input.value = "";
+    return;
+  }
+  list.push(name);
+  input.value = "";
+  await persistExerciseList(list);
+});
+
+document.getElementById("toggleBulkAddBtn").addEventListener("click", () => {
+  const block = document.getElementById("bulkAddBlock");
+  block.style.display = block.style.display === "none" ? "block" : "none";
+});
+
+document.getElementById("addBulkExerciseBtn").addEventListener("click", async () => {
+  const textarea = document.getElementById("bulkExerciseInput");
+  const names = textarea.value.split("\n").map((n) => n.trim()).filter(Boolean);
+  if (names.length === 0) return;
+  const list = [...(currentProfile?.exerciseList || [])];
+  const existingLower = new Set(list.map((n) => n.toLowerCase()));
+  let added = 0;
+  names.forEach((name) => {
+    if (!existingLower.has(name.toLowerCase())) {
+      list.push(name);
+      existingLower.add(name.toLowerCase());
+      added++;
+    }
+  });
+  if (added === 0) {
+    showToast("Nessun esercizio nuovo da aggiungere.");
+    return;
+  }
+  textarea.value = "";
+  document.getElementById("bulkAddBlock").style.display = "none";
+  await persistExerciseList(list);
+  showToast(`${added} esercizi aggiunti`);
 });
 
 // ---- foto profilo ----

@@ -93,6 +93,7 @@ users/{uid}/profile/data             // documento singolo: profilo utente
   heightCm: number
   photoData: string   // data URL base64, foto profilo compressa (stesso schema delle foto pasto)
   dailyGoal: { calories, protein_g, carbs_g, fat_g }   // obiettivo giornaliero, opzionale
+  exerciseList: string[]   // esercizi personalizzati, per il menu a tendina in Palestra
   updatedAt: timestamp
 
 users/{uid}/workouts/{id}
@@ -116,6 +117,7 @@ users/{uid}/meals/{id}
 ## 5. Funzionalità aggiuntive
 
 - **Cardio**: oltre agli esercizi con pesi, ogni allenamento può includere sessioni cardio/sport (corsa, nuoto, ciclismo, ecc.) con distanza, durata e kcal bruciate — stimabili anche con l'AI (testo, non foto) usando i dati del tuo profilo se li hai impostati.
+- **Esercizi personalizzati**: in Palestra, il nome dell'esercizio si sceglie da un menu a tendina (niente da riscrivere ogni volta) con opzione per aggiungerne uno nuovo al volo — che poi resta salvato per le prossime volte. Gestione completa (rinomina, elimina, aggiungi) in Home → Impostazioni → "I tuoi esercizi".
 - **Profilo utente**: peso, età, altezza e foto profilo, impostabili dalla Home → Impostazioni. Alimentano le stime AI (es. kcal bruciate) per risultati più precisi.
 - **Obiettivo calorico/macro giornaliero**: impostabile in Home → Impostazioni; la pagina Pasti (e la dashboard, per le kcal) mostrano una barra di progresso rispetto al consumato del giorno.
 - **Andamento pasti**: nella pagina Pasti, grafici (Chart.js via CDN) di kcal e macro totali per giorno sugli ultimi 10/20/30/60 giorni, con export CSV aggregato per giorno.

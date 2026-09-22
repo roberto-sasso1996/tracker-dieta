@@ -93,7 +93,7 @@ import { requireAuth } from "./js/auth.js";
 import { db } from "./js/firebase-init.js";
 import { collection, addDoc, deleteDoc, doc, query, orderBy, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { estimateKcalForActivity, hasApiKey } from "./js/ai-vision.js";
-import { getProfile } from "./js/profile.js";
+import { getProfile, saveProfile } from "./js/profile.js";
 import { downloadCsv } from "./js/csv-utils.js";
 
 let currentUser = null;
@@ -285,15 +285,46 @@ function addExerciseBlock() {
   const block = document.createElement("div");
   block.className = "exercise-block";
   block.dataset.exId = id;
+
+  const savedExercises = currentProfile?.exerciseList || [];
+  const hasSaved = savedExercises.length > 0;
+  const optionsHtml = savedExercises.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+
   block.innerHTML = `
     <div class="ex-head">
-      <input type="text" placeholder="Nome esercizio (es. Panca piana)" class="ex-name">
+      <select class="ex-name-select" ${hasSaved ? "" : "hidden"}>
+        <option value="">Scegli esercizio…</option>
+        ${optionsHtml}
+        <option value="__custom__">+ Nuovo esercizio…</option>
+      </select>
+      <input type="text" class="ex-name-custom" placeholder="Nome esercizio (es. Panca piana)" ${hasSaved ? "hidden" : ""}>
       <button class="icon-btn ex-remove" title="Rimuovi esercizio">✕</button>
     </div>
+    <button type="button" class="link-btn ex-back-to-list" style="color:var(--gym); margin-top:-4px; margin-bottom:8px;" hidden>← Scegli dalla lista</button>
     <div class="sets-container"></div>
     <button class="link-btn add-set-btn" style="color:var(--gym);">+ Aggiungi serie</button>
   `;
   container.appendChild(block);
+
+  const select = block.querySelector(".ex-name-select");
+  const customInput = block.querySelector(".ex-name-custom");
+  const backBtn = block.querySelector(".ex-back-to-list");
+
+  select.addEventListener("change", () => {
+    if (select.value === "__custom__") {
+      select.hidden = true;
+      customInput.hidden = false;
+      customInput.value = "";
+      customInput.focus();
+      backBtn.hidden = false;
+    }
+  });
+  backBtn.addEventListener("click", () => {
+    customInput.hidden = true;
+    select.hidden = false;
+    select.value = "";
+    backBtn.hidden = true;
+  });
 
   block.querySelector(".ex-remove").addEventListener("click", () => block.remove());
   block.querySelector(".add-set-btn").addEventListener("click", () => addSetRow(block));
@@ -415,8 +446,10 @@ document.getElementById("saveWorkoutBtn").addEventListener("click", async () => 
 
   const exercises = [];
   document.querySelectorAll("#exerciseContainer .exercise-block").forEach((block) => {
-    const name = block.querySelector(".ex-name").value.trim();
-    if (!name) return;
+    const select = block.querySelector(".ex-name-select");
+    const customInput = block.querySelector(".ex-name-custom");
+    const name = (customInput.hidden ? select.value : customInput.value).trim();
+    if (!name || name === "__custom__") return;
     const sets = [];
     block.querySelectorAll(".set-input-row").forEach((row) => {
       const reps = row.querySelector(".set-reps").value;
@@ -453,6 +486,21 @@ document.getElementById("saveWorkoutBtn").addEventListener("click", async () => 
     await addDoc(collection(db, "users", currentUser.uid, "workouts"), {
       date, exercises, cardio, notes, createdAt: serverTimestamp()
     });
+
+    // esercizi scritti a mano (non scelti dal menu): li aggiungo alla lista personale per la prossima volta
+    const savedList = currentProfile?.exerciseList || [];
+    const savedLower = new Set(savedList.map((n) => n.toLowerCase()));
+    const newNames = [...new Set(exercises.map((ex) => ex.name))].filter((n) => !savedLower.has(n.toLowerCase()));
+    if (newNames.length > 0) {
+      const updatedList = [...savedList, ...newNames];
+      try {
+        await saveProfile(currentUser.uid, { exerciseList: updatedList });
+        currentProfile = { ...currentProfile, exerciseList: updatedList };
+      } catch (e) {
+        console.error(e); // non bloccante: l'allenamento è comunque salvato
+      }
+    }
+
     sheetBackdrop.classList.remove("open");
     showToast("Allenamento salvato");
     loadWorkouts();
