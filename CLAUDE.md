@@ -35,6 +35,7 @@ js/image-utils.js  compressImage(file) → {dataUrl, base64, mediaType, approxBy
 js/ai-vision.js    estimateMacrosFromPhoto(base64, mediaType) → Claude vision; estimateKcalForActivity(activity, durationMin, distanceKm, profile) → Claude testuale, stima kcal via MET usando il profilo utente se disponibile (altrimenti adulto medio ~70kg)
 js/profile.js      getProfile(uid) / saveProfile(uid, fields) → users/{uid}/profile/data (peso/età/altezza/foto profilo/obiettivo giornaliero)
 js/csv-utils.js    downloadCsv(filename, rows) → export CSV lato client (Blob + <a download>), usato da gym.html e food.html
+icons/              apple-touch-icon.png (180x180), icon-512.png, favicon-32.png — generate con `sips` da un'immagine sorgente 1024x1024 fornita dall'utente, nessuna dipendenza aggiunta
 README.md          istruzioni di setup complete (Firebase, API key, deploy) — utili anche a te per capire il "perché"
 ```
 
