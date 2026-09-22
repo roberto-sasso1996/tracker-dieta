@@ -6,7 +6,6 @@
 <title>Palestra — Tracker</title>
 <link rel="stylesheet" href="css/style.css">
 <style>:root { --accent: var(--gym); }</style>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -32,17 +31,7 @@
       <h1>Storico carichi</h1>
     </div>
 
-    <div class="section-title" style="margin-top:0;">Progressione carichi</div>
-    <div class="field" style="max-width:260px;">
-      <label for="progressExerciseSelect">Esercizio</label>
-      <select id="progressExerciseSelect"></select>
-    </div>
-    <div class="chart-card" style="position:relative; height:220px;">
-      <canvas id="progressChart"></canvas>
-      <div class="empty-state" id="progressEmpty" style="display:none; padding:20px;">Aggiungi almeno un allenamento con carichi per vedere il grafico.</div>
-    </div>
-
-    <div class="section-title">
+    <div class="section-title" style="margin-top:0;">
       <span>Storico</span>
       <button class="link-btn" id="exportCsvBtn" style="color:var(--gym);">⬇ Esporta CSV</button>
     </div>
@@ -112,7 +101,6 @@ let currentProfile = null;
 let exerciseIdCounter = 0;
 let cardioIdCounter = 0;
 let allWorkouts = [];
-let progressChartInstance = null;
 
 requireAuth().then(async (user) => {
   currentUser = user;
@@ -145,7 +133,6 @@ async function loadWorkouts() {
   const snap = await getDocs(wq);
 
   allWorkouts = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  populateExerciseSelect();
 
   if (allWorkouts.length === 0) {
     listEl.innerHTML = '<div class="empty-state">Nessun allenamento registrato. Tocca + per iniziare.</div>';
@@ -250,97 +237,6 @@ function openWorkoutDetail(w) {
 
   document.getElementById("detailBody").innerHTML = html || '<div class="empty-state">Nessun dettaglio.</div>';
   detailBackdrop.classList.add("open");
-}
-
-// ---------------- progressione carichi (Chart.js) ----------------
-
-function cssVar(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
-function populateExerciseSelect() {
-  const select = document.getElementById("progressExerciseSelect");
-  const names = new Set();
-  allWorkouts.forEach((w) => (w.exercises || []).forEach((ex) => { if (ex.name) names.add(ex.name); }));
-
-  const previousValue = select.value;
-  select.innerHTML = "";
-
-  if (names.size === 0) {
-    select.innerHTML = '<option value="">Nessun esercizio ancora</option>';
-    select.disabled = true;
-    renderProgressChart(null);
-    return;
-  }
-
-  select.disabled = false;
-  [...names].sort((a, b) => a.localeCompare(b, "it")).forEach((name) => {
-    const opt = document.createElement("option");
-    opt.value = name;
-    opt.textContent = name;
-    select.appendChild(opt);
-  });
-  select.value = names.has(previousValue) ? previousValue : select.options[0].value;
-  renderProgressChart(select.value);
-}
-
-document.getElementById("progressExerciseSelect").addEventListener("change", (e) => renderProgressChart(e.target.value));
-
-function renderProgressChart(exerciseName) {
-  const canvas = document.getElementById("progressChart");
-  const emptyEl = document.getElementById("progressEmpty");
-
-  const rows = [];
-  if (exerciseName) {
-    allWorkouts.forEach((w) => {
-      (w.exercises || []).forEach((ex) => {
-        if (ex.name !== exerciseName) return;
-        const weights = (ex.sets || []).map((s) => Number(s.weight) || 0);
-        if (weights.length) rows.push({ date: w.date, maxWeight: Math.max(...weights) });
-      });
-    });
-    rows.sort((a, b) => a.date.localeCompare(b.date));
-  }
-
-  if (progressChartInstance) {
-    progressChartInstance.destroy();
-    progressChartInstance = null;
-  }
-
-  if (rows.length === 0) {
-    canvas.style.display = "none";
-    emptyEl.style.display = "block";
-    return;
-  }
-
-  canvas.style.display = "block";
-  emptyEl.style.display = "none";
-
-  progressChartInstance = new Chart(canvas, {
-    type: "line",
-    data: {
-      labels: rows.map((r) => new Date(r.date + "T00:00:00").toLocaleDateString("it-IT", { day: "numeric", month: "short" })),
-      datasets: [{
-        label: "Carico massimo (kg)",
-        data: rows.map((r) => r.maxWeight),
-        borderColor: cssVar("--gym"),
-        backgroundColor: "rgba(255,107,74,0.12)",
-        pointBackgroundColor: cssVar("--gym"),
-        tension: 0.25,
-        pointRadius: 4,
-        fill: true
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { ticks: { color: cssVar("--text-dim") }, grid: { color: cssVar("--border") } },
-        y: { beginAtZero: true, ticks: { color: cssVar("--text-dim") }, grid: { color: cssVar("--border") } }
-      }
-    }
-  });
 }
 
 // ---------------- export CSV ----------------

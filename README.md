@@ -117,9 +117,10 @@ users/{uid}/meals/{id}
 
 - **Cardio**: oltre agli esercizi con pesi, ogni allenamento può includere sessioni cardio/sport (corsa, nuoto, ciclismo, ecc.) con distanza, durata e kcal bruciate — stimabili anche con l'AI (testo, non foto) usando i dati del tuo profilo se li hai impostati.
 - **Profilo utente**: peso, età, altezza e foto profilo, impostabili dalla Home → Impostazioni. Alimentano le stime AI (es. kcal bruciate) per risultati più precisi.
-- **Grafico progressione carichi**: nella pagina Palestra, seleziona un esercizio per vedere il carico massimo per sessione nel tempo (Chart.js via CDN).
 - **Obiettivo calorico/macro giornaliero**: impostabile in Home → Impostazioni; la pagina Pasti (e la dashboard, per le kcal) mostrano una barra di progresso rispetto al consumato del giorno.
+- **Andamento pasti**: nella pagina Pasti, grafici (Chart.js via CDN) di kcal e macro totali per giorno sugli ultimi 10/20/30/60 giorni, con export CSV aggregato per giorno.
 - **Export CSV**: dalle pagine Palestra e Pasti puoi scaricare l'intero storico in CSV (esclude le foto, che restano solo su Firestore).
+- **Dashboard con dettaglio**: la Home mostra allenamento e pasti di oggi; cliccando una card si apre un pop-up con tutti i dettagli. La lista di ogni pagina (Palestra, Pasti) si aggiorna subito dopo ogni aggiunta o eliminazione.
 
 ## 6. Possibili estensioni (non incluse)
 

@@ -215,6 +215,10 @@ requireAuth().then(async (user) => {
 document.getElementById("dayPicker").addEventListener("change", (e) => loadDay(e.target.value));
 document.getElementById("trendDaysSelect").addEventListener("change", (e) => loadTrend(Number(e.target.value)));
 
+function refreshTrend() {
+  loadTrend(Number(document.getElementById("trendDaysSelect").value));
+}
+
 // ---------------- andamento (grafici periodo + export) ----------------
 
 async function loadTrend(days) {
@@ -384,6 +388,7 @@ async function loadDay(dateStr) {
       if (!confirm("Eliminare questo pasto?")) return;
       await deleteDoc(doc(db, "users", currentUser.uid, "meals", btn.dataset.del));
       loadDay(document.getElementById("dayPicker").value);
+      refreshTrend();
     });
   });
 
@@ -592,6 +597,7 @@ document.getElementById("saveMealBtn").addEventListener("click", async () => {
     showToast("Pasto salvato");
     document.getElementById("dayPicker").value = date;
     await loadDay(date);
+    refreshTrend();
   } catch (e) {
     errEl.textContent = "Errore nel salvataggio: " + e.message;
     errEl.style.display = "block";

@@ -39,7 +39,7 @@ icons/              apple-touch-icon.png (180x180), icon-512.png, favicon-32.png
 README.md          istruzioni di setup complete (Firebase, API key, deploy) — utili anche a te per capire il "perché"
 ```
 
-Chart.js caricato via CDN (`cdn.jsdelivr.net`, UMD build pinnata a una versione) in `gym.html` (progressione carichi) e `food.html` (andamento kcal/macro) — stesso principio "niente build step" del resto: script tag classico, nessun bundler.
+Chart.js caricato via CDN (`cdn.jsdelivr.net`, UMD build pinnata a una versione) solo in `food.html` (sezione Andamento) — stesso principio "niente build step" del resto: script tag classico, nessun bundler. Rimosso da `gym.html` su richiesta esplicita dell'utente (il grafico di progressione carichi per esercizio non c'è più).
 
 ## Schema dati (Firestore)
 
@@ -77,9 +77,11 @@ users/{uid}/meals/{id}
 
 ## Estensioni implementate
 
-Grafico progressione carichi per esercizio (Chart.js, in `gym.html`), obiettivo calorico/macro giornaliero con barra di progresso (`dailyGoal` nel profilo, mostrato in `food.html` e nella dashboard), export CSV dello storico (`js/csv-utils.js`, bottoni in `gym.html`/`food.html`), dashboard con allenamento+pasti di oggi (`index.html`), sezione Andamento in `food.html` con grafici kcal/macro per periodo (10/20/30/60gg) ed export CSV aggregato per giorno.
+Obiettivo calorico/macro giornaliero con barra di progresso (`dailyGoal` nel profilo, mostrato in `food.html` e nella dashboard), export CSV dello storico (`js/csv-utils.js`, bottoni in `gym.html`/`food.html`), dashboard con allenamento+pasti di oggi (`index.html`), sezione Andamento in `food.html` con grafici kcal/macro per periodo (10/20/30/60gg) ed export CSV aggregato per giorno.
 
 **Sheet di dettaglio al click su una card** (pasto o allenamento): implementato separatamente in ciascuna delle tre pagine (`index.html`, `gym.html`, `food.html`) — ognuna ha il proprio `#detailBackdrop`/`openMealDetail`/`openWorkoutDetail`, non è un componente condiviso (nessun sistema di import di componenti in un progetto senza build step). Se lo modifichi in una pagina, replica la modifica nelle altre se serve coerenza.
+
+**Refresh dopo add/delete**: ogni pagina ri-fetcha e ri-renderizza subito dopo una modifica (nessun listener Firestore `onSnapshot`, per scelta di semplicità — refresh esplicito dopo ogni mutazione, non push in tempo reale multi-tab/multi-dispositivo). In `food.html`, sia il salvataggio che l'eliminazione di un pasto richiamano anche `refreshTrend()` per tenere sincronizzati i grafici della sezione Andamento — se aggiungi altre azioni che modificano i pasti, ricordati di chiamarla anche lì.
 
 ## Estensioni proposte ma non implementate
 
