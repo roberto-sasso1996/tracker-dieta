@@ -72,9 +72,23 @@
       </a>
     </div>
 
-    <div class="section-title">Oggi</div>
+    <div class="section-title">Allenamento di oggi</div>
+    <div id="todayWorkoutList"><div class="empty-state">Caricamento…</div></div>
+
+    <div class="section-title">Pasti di oggi</div>
     <div id="todayMealsList"><div class="empty-state">Caricamento…</div></div>
   </main>
+</div>
+
+<!-- ---------- SHEET DETTAGLIO (pasto o allenamento) ---------- -->
+<div class="sheet-backdrop" id="detailBackdrop">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2 id="detailTitle">Dettaglio</h2>
+      <button class="icon-btn" id="closeDetail">✕</button>
+    </div>
+    <div id="detailBody"></div>
+  </div>
 </div>
 
 <!-- ---------- SHEET IMPOSTAZIONI ---------- -->
@@ -157,6 +171,51 @@ let isRegisterMode = false;
 let currentUser = null;
 let currentProfile = null;
 let pendingProfilePhoto = null; // dataUrl compressa, solo se l'utente ha scelto una nuova foto in questa sessione dello sheet
+
+// ---- sheet dettaglio (pasto o allenamento, al click su una card) ----
+const detailBackdrop = document.getElementById("detailBackdrop");
+document.getElementById("closeDetail").addEventListener("click", () => detailBackdrop.classList.remove("open"));
+detailBackdrop.addEventListener("click", (e) => { if (e.target === detailBackdrop) detailBackdrop.classList.remove("open"); });
+
+function openMealDetail(m) {
+  document.getElementById("detailTitle").textContent = m.mealType || "Pasto";
+  document.getElementById("detailBody").innerHTML = `
+    ${m.photoData ? `<img src="${m.photoData}" style="width:100%; border-radius:var(--radius-sm); margin-bottom:14px;" alt="">` : ""}
+    <p style="margin-bottom:16px; color:var(--text-dim);">${escapeHtml(m.description || "Nessuna descrizione.")}</p>
+    <div class="macro-grid" style="margin-bottom:0; text-align:center;">
+      <div><div class="tile-stat" style="font-size:1.3rem;">${Math.round(m.macros?.calories || 0)}</div><div class="tile-stat-label">kcal</div></div>
+      <div><div class="tile-stat" style="font-size:1.3rem;">${Math.round(m.macros?.protein_g || 0)}g</div><div class="tile-stat-label">proteine</div></div>
+      <div><div class="tile-stat" style="font-size:1.3rem;">${Math.round(m.macros?.carbs_g || 0)}g</div><div class="tile-stat-label">carbo</div></div>
+      <div><div class="tile-stat" style="font-size:1.3rem;">${Math.round(m.macros?.fat_g || 0)}g</div><div class="tile-stat-label">grassi</div></div>
+    </div>`;
+  detailBackdrop.classList.add("open");
+}
+
+function openWorkoutDetail(w) {
+  const dateLabel = new Date(w.date + "T00:00:00").toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" });
+  document.getElementById("detailTitle").textContent = dateLabel;
+
+  let html = "";
+  (w.exercises || []).forEach((ex) => {
+    let setsHtml = "";
+    (ex.sets || []).forEach((s, i) => {
+      setsHtml += `<div class="set-row"><span class="set-idx">${i + 1}</span><span class="set-val">${s.reps} rip. × ${s.weight} kg</span></div>`;
+    });
+    html += `<div style="margin-top:10px;"><div class="entry-title" style="font-size:0.9rem;">${escapeHtml(ex.name)}</div>${setsHtml}</div>`;
+  });
+  (w.cardio || []).forEach((c) => {
+    const parts = [];
+    if (c.distanceKm) parts.push(`${c.distanceKm} km`);
+    if (c.durationMin) parts.push(`${c.durationMin} min`);
+    if (c.speedKmh) parts.push(`${c.speedKmh} km/h media`);
+    if (c.kcal) parts.push(`${c.kcal} kcal`);
+    html += `<div style="margin-top:10px;"><div class="entry-title" style="font-size:0.9rem;">🏃 ${escapeHtml(c.activity || "Cardio")}</div><div class="set-row"><span class="set-val">${parts.join(" · ")}</span></div></div>`;
+  });
+  if (w.notes) html += `<p style="margin-top:16px; font-size:0.85rem; color:var(--text-dim);">${escapeHtml(w.notes)}</p>`;
+
+  document.getElementById("detailBody").innerHTML = html || '<div class="empty-state">Nessun dettaglio.</div>';
+  detailBackdrop.classList.add("open");
+}
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -382,7 +441,7 @@ document.getElementById("logoutBtn").addEventListener("click", logout);
 async function loadDashboard(uid) {
   document.getElementById("todayLabel").textContent = new Date().toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" });
 
-  // ultimo allenamento
+  // ultimo allenamento + allenamenti di oggi
   try {
     const wq = query(collection(db, "users", uid, "workouts"), orderBy("date", "desc"));
     const wSnap = await getDocs(wq);
@@ -392,7 +451,34 @@ async function loadDashboard(uid) {
     } else {
       document.getElementById("lastWorkoutStat").textContent = "—";
     }
-  } catch (e) { console.error(e); }
+
+    const today = todayStr();
+    const todayWorkouts = wSnap.docs.filter((d) => d.data().date === today).map((d) => ({ id: d.id, ...d.data() }));
+    const workoutList = document.getElementById("todayWorkoutList");
+    if (todayWorkouts.length === 0) {
+      workoutList.innerHTML = '<div class="empty-state">Nessun allenamento registrato oggi. Vai su Palestra per aggiungerne uno.</div>';
+    } else {
+      workoutList.innerHTML = "";
+      todayWorkouts.forEach((w) => {
+        const metaParts = [];
+        if ((w.exercises || []).length) metaParts.push(`${w.exercises.length} esercizi`);
+        if ((w.cardio || []).length) metaParts.push(`${w.cardio.length} cardio`);
+        workoutList.innerHTML += `
+          <div class="meal-entry" data-workout-id="${w.id}" style="cursor:pointer;">
+            <div class="meal-body">
+              <div class="meal-type" style="color:var(--gym);">Allenamento</div>
+              <div class="meal-desc">${metaParts.join(" · ") || "Nessun dettaglio"}</div>
+            </div>
+          </div>`;
+      });
+      workoutList.querySelectorAll("[data-workout-id]").forEach((el, i) => {
+        el.addEventListener("click", () => openWorkoutDetail(todayWorkouts[i]));
+      });
+    }
+  } catch (e) {
+    console.error(e);
+    document.getElementById("todayWorkoutList").innerHTML = `<div class="empty-state">Errore nel caricamento: ${escapeHtml(e.message)}</div>`;
+  }
 
   // pasti di oggi
   try {
@@ -417,7 +503,7 @@ async function loadDashboard(uid) {
         const m = docSnap.data();
         totalCal += m.macros?.calories || 0;
         list.innerHTML += `
-          <div class="meal-entry">
+          <div class="meal-entry" data-meal-id="${docSnap.id}" style="cursor:pointer;">
             <img src="${m.photoData || ''}" alt="">
             <div class="meal-body">
               <div class="meal-type">${escapeHtml(m.mealType || '')}</div>
@@ -434,6 +520,9 @@ async function loadDashboard(uid) {
       document.getElementById("todayCaloriesStat").textContent = Math.round(totalCal);
       todayTotalCal = totalCal;
       renderGoalProgress();
+      list.querySelectorAll("[data-meal-id]").forEach((el, i) => {
+        el.addEventListener("click", () => openMealDetail(docs[i].data()));
+      });
     }
   } catch (e) {
     console.error(e);

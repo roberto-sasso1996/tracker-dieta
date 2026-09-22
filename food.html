@@ -6,6 +6,7 @@
 <title>Pasti — Tracker</title>
 <link rel="stylesheet" href="css/style.css">
 <style>:root { --accent: var(--food); }</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -54,6 +55,26 @@
     <div id="goalBlock" style="display:none; margin-top:6px;">
       <div class="section-title" style="margin-top:22px;">Obiettivo giornaliero</div>
       <div class="chart-card" id="goalBars"></div>
+    </div>
+
+    <div class="section-title" style="margin-top:22px;">
+      <span>Andamento</span>
+      <button class="link-btn" id="exportTrendCsvBtn" style="color:var(--food);">⬇ Esporta CSV</button>
+    </div>
+    <div class="field" style="max-width:200px;">
+      <label for="trendDaysSelect">Periodo</label>
+      <select id="trendDaysSelect">
+        <option value="10">Ultimi 10 giorni</option>
+        <option value="20">Ultimi 20 giorni</option>
+        <option value="30" selected>Ultimi 30 giorni</option>
+        <option value="60">Ultimi 60 giorni</option>
+      </select>
+    </div>
+    <div class="chart-card" style="position:relative; height:200px;">
+      <canvas id="trendCaloriesChart"></canvas>
+    </div>
+    <div class="chart-card" style="position:relative; height:200px; margin-top:10px;">
+      <canvas id="trendMacrosChart"></canvas>
     </div>
 
     <div class="section-title">
@@ -128,8 +149,15 @@ let currentUser = null;
 let currentProfile = null;
 let compressedPhoto = null; // { dataUrl, base64, mediaType, approxBytes }
 let selectedMealType = null;
+let trendRows = [];
+let trendCalChart = null;
+let trendMacroChart = null;
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
+
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
 
 function showToast(msg) {
   const t = document.getElementById("toast");
@@ -151,9 +179,112 @@ requireAuth().then(async (user) => {
     console.error(e);
   }
   loadDay(todayStr());
+  loadTrend(Number(document.getElementById("trendDaysSelect").value));
 });
 
 document.getElementById("dayPicker").addEventListener("change", (e) => loadDay(e.target.value));
+document.getElementById("trendDaysSelect").addEventListener("change", (e) => loadTrend(Number(e.target.value)));
+
+// ---------------- andamento (grafici periodo + export) ----------------
+
+async function loadTrend(days) {
+  const today = new Date();
+  const start = new Date(today);
+  start.setDate(start.getDate() - (days - 1));
+  const startStr = start.toISOString().slice(0, 10);
+  const todayStrVal = todayStr();
+
+  let snap;
+  try {
+    const mq = query(
+      collection(db, "users", currentUser.uid, "meals"),
+      where("date", ">=", startStr),
+      where("date", "<=", todayStrVal)
+    );
+    snap = await getDocs(mq);
+  } catch (e) {
+    console.error(e);
+    showToast("Errore nel caricamento dell'andamento: " + e.message);
+    return;
+  }
+
+  const byDate = {};
+  snap.forEach((docSnap) => {
+    const m = docSnap.data();
+    if (!byDate[m.date]) byDate[m.date] = { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
+    byDate[m.date].calories += m.macros?.calories || 0;
+    byDate[m.date].protein_g += m.macros?.protein_g || 0;
+    byDate[m.date].carbs_g += m.macros?.carbs_g || 0;
+    byDate[m.date].fat_g += m.macros?.fat_g || 0;
+  });
+
+  const rows = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    const dateStr = d.toISOString().slice(0, 10);
+    rows.push({ date: dateStr, ...(byDate[dateStr] || { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }) });
+  }
+
+  trendRows = rows;
+  renderTrendCharts(rows);
+}
+
+function renderTrendCharts(rows) {
+  const labels = rows.map((r) => new Date(r.date + "T00:00:00").toLocaleDateString("it-IT", { day: "numeric", month: "short" }));
+
+  if (trendCalChart) { trendCalChart.destroy(); trendCalChart = null; }
+  trendCalChart = new Chart(document.getElementById("trendCaloriesChart"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{ label: "Kcal", data: rows.map((r) => Math.round(r.calories)), backgroundColor: cssVar("--food") }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: cssVar("--text-dim"), maxRotation: 0, autoSkip: true }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { color: cssVar("--text-dim") }, grid: { color: cssVar("--border") } }
+      }
+    }
+  });
+
+  if (trendMacroChart) { trendMacroChart.destroy(); trendMacroChart = null; }
+  trendMacroChart = new Chart(document.getElementById("trendMacrosChart"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        { label: "Proteine g", data: rows.map((r) => Math.round(r.protein_g)), backgroundColor: "#ff6b4a" },
+        { label: "Carboidrati g", data: rows.map((r) => Math.round(r.carbs_g)), backgroundColor: "#5fbf8f" },
+        { label: "Grassi g", data: rows.map((r) => Math.round(r.fat_g)), backgroundColor: "#8b93a3" }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: cssVar("--text-dim") } } },
+      scales: {
+        x: { stacked: true, ticks: { color: cssVar("--text-dim"), maxRotation: 0, autoSkip: true }, grid: { display: false } },
+        y: { stacked: true, beginAtZero: true, ticks: { color: cssVar("--text-dim") }, grid: { color: cssVar("--border") } }
+      }
+    }
+  });
+}
+
+document.getElementById("exportTrendCsvBtn").addEventListener("click", () => {
+  if (trendRows.length === 0) {
+    showToast("Nessun dato da esportare.");
+    return;
+  }
+  const rows = [["Data", "Kcal totali", "Proteine g", "Carboidrati g", "Grassi g"]];
+  trendRows.forEach((r) => {
+    rows.push([r.date, Math.round(r.calories), Math.round(r.protein_g), Math.round(r.carbs_g), Math.round(r.fat_g)]);
+  });
+  downloadCsv(`andamento_${trendRows.length}gg_${todayStr()}.csv`, rows);
+});
 
 // ---------------- lista pasti del giorno ----------------
 

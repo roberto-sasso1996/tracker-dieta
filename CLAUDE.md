@@ -25,9 +25,9 @@ Queste sono scelte deliberate, non dimenticanze. Se sembrano subottimali, il mot
 ## Struttura file
 
 ```
-index.html        login/registrazione + dashboard (riepilogo giorno, tile Palestra/Pasti, sheet Impostazioni)
+index.html        login/registrazione + dashboard (allenamento di oggi, pasti di oggi — card cliccabili che aprono uno sheet di dettaglio condiviso, tile Palestra/Pasti, sheet Impostazioni)
 gym.html           storico allenamenti + form dinamico esercizi/serie/carichi (pesi) e sessioni cardio (distanza/durata/kcal)
-food.html          diario pasti: cattura foto → compressione → analisi AI opzionale → macro editabili → salvataggio
+food.html          diario pasti: cattura foto → compressione → analisi AI opzionale (foto e/o testo) → macro editabili → salvataggio; più sezione Andamento (grafici Chart.js kcal/macro per 10/20/30/60 giorni + export CSV aggregato per giorno)
 css/style.css      design system via CSS var: --gym (corallo) e --food (verde salvia) come accenti funzionali
 js/firebase-init.js  init Firebase + config (già compilata)
 js/auth.js         login/registrazione/logout + requireAuth() come guardia di route sulle pagine protette
@@ -39,7 +39,7 @@ icons/              apple-touch-icon.png (180x180), icon-512.png, favicon-32.png
 README.md          istruzioni di setup complete (Firebase, API key, deploy) — utili anche a te per capire il "perché"
 ```
 
-Chart.js caricato via CDN (`cdn.jsdelivr.net`, UMD build pinnata a una versione) solo in `gym.html`, per il grafico di progressione carichi — stesso principio "niente build step" del resto: script tag classico, nessun bundler.
+Chart.js caricato via CDN (`cdn.jsdelivr.net`, UMD build pinnata a una versione) in `gym.html` (progressione carichi) e `food.html` (andamento kcal/macro) — stesso principio "niente build step" del resto: script tag classico, nessun bundler.
 
 ## Schema dati (Firestore)
 
@@ -77,7 +77,7 @@ users/{uid}/meals/{id}
 
 ## Estensioni implementate
 
-Grafico progressione carichi per esercizio (Chart.js, in `gym.html`), obiettivo calorico/macro giornaliero con barra di progresso (`dailyGoal` nel profilo, mostrato in `food.html` e nella dashboard), export CSV dello storico (`js/csv-utils.js`, bottoni in `gym.html`/`food.html`).
+Grafico progressione carichi per esercizio (Chart.js, in `gym.html`), obiettivo calorico/macro giornaliero con barra di progresso (`dailyGoal` nel profilo, mostrato in `food.html` e nella dashboard), export CSV dello storico (`js/csv-utils.js`, bottoni in `gym.html`/`food.html`), dashboard con allenamento+pasti di oggi e sheet di dettaglio al click (`index.html`), sezione Andamento in `food.html` con grafici kcal/macro per periodo (10/20/30/60gg) ed export CSV aggregato per giorno.
 
 ## Estensioni proposte ma non implementate
 
