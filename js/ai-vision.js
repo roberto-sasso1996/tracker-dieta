@@ -36,22 +36,45 @@ export function setModel(model) {
 }
 
 /**
- * Analizza una foto di un pasto (già compressa in base64 da image-utils.js)
- * e ritorna una stima dei macro.
- * @param {string} base64 - dati base64 dell'immagine, senza prefisso "data:...;base64,"
- * @param {string} mediaType - es. "image/jpeg"
+ * Stima i macro di un pasto da una foto, da una descrizione testuale, o da entrambe
+ * insieme: se ci sono sia foto che testo, il testo viene usato come contesto aggiuntivo
+ * per affinare la lettura della foto (quantità, ingredienti non visibili, condimenti...).
+ * Serve almeno uno dei due.
+ * @param {{base64?:string, mediaType?:string, description?:string}} input
+ *   base64/mediaType: foto già compressa da image-utils.js (opzionale)
+ *   description: testo scritto dall'utente (opzionale)
  * @returns {Promise<{description:string, calories:number, protein_g:number, carbs_g:number, fat_g:number}>}
  */
-export async function estimateMacrosFromPhoto(base64, mediaType) {
+export async function estimateMacros({ base64, mediaType, description } = {}) {
   const apiKey = getApiKey();
   if (!apiKey) {
     throw new Error("Nessuna API key Anthropic impostata. Aprine una nelle Impostazioni.");
   }
+  const text = (description || "").trim();
+  if (!base64 && !text) {
+    throw new Error("Aggiungi una foto o scrivi una descrizione del pasto prima di analizzare.");
+  }
 
-  const prompt = `Analizza questa foto di un pasto. Stima gli alimenti visibili e i loro macronutrienti totali.
+  let prompt;
+  if (base64 && text) {
+    prompt = `Analizza questa foto di un pasto. L'utente ha aggiunto anche queste informazioni: "${text}" — usale per affinare la stima (quantità, ingredienti non visibili nella foto, condimenti, ecc).
+Stima gli alimenti totali e i loro macronutrienti.
+Rispondi SOLO con un oggetto JSON valido, senza markdown e senza testo aggiuntivo, in questo formato esatto:
+{"description": "breve descrizione in italiano del pasto, che integra quanto scritto dall'utente", "calories": numero_kcal, "protein_g": numero, "carbs_g": numero, "fat_g": numero}`;
+  } else if (base64) {
+    prompt = `Analizza questa foto di un pasto. Stima gli alimenti visibili e i loro macronutrienti totali.
 Rispondi SOLO con un oggetto JSON valido, senza markdown e senza testo aggiuntivo, in questo formato esatto:
 {"description": "breve descrizione in italiano degli alimenti visibili", "calories": numero_kcal, "protein_g": numero, "carbs_g": numero, "fat_g": numero}
 Se la foto non mostra cibo chiaramente, fai comunque la stima migliore possibile e indicalo nella description.`;
+  } else {
+    prompt = `Stima i macronutrienti di questo pasto, descritto dall'utente (nessuna foto disponibile): "${text}"
+Rispondi SOLO con un oggetto JSON valido, senza markdown e senza testo aggiuntivo, in questo formato esatto:
+{"description": "breve descrizione in italiano del pasto", "calories": numero_kcal, "protein_g": numero, "carbs_g": numero, "fat_g": numero}`;
+  }
+
+  const content = base64
+    ? [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: prompt }]
+    : prompt;
 
   const response = await fetch(API_URL, {
     method: "POST",
@@ -64,18 +87,7 @@ Se la foto non mostra cibo chiaramente, fai comunque la stima migliore possibile
     body: JSON.stringify({
       model: getModel(),
       max_tokens: 400,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: { type: "base64", media_type: mediaType, data: base64 }
-            },
-            { type: "text", text: prompt }
-          ]
-        }
-      ]
+      messages: [{ role: "user", content }]
     })
   });
 

@@ -32,7 +32,7 @@ css/style.css      design system via CSS var: --gym (corallo) e --food (verde sa
 js/firebase-init.js  init Firebase + config (già compilata)
 js/auth.js         login/registrazione/logout + requireAuth() come guardia di route sulle pagine protette
 js/image-utils.js  compressImage(file) → {dataUrl, base64, mediaType, approxBytes}
-js/ai-vision.js    estimateMacrosFromPhoto(base64, mediaType) → Claude vision; estimateKcalForActivity(activity, durationMin, distanceKm, profile) → Claude testuale, stima kcal via MET usando il profilo utente se disponibile (altrimenti adulto medio ~70kg)
+js/ai-vision.js    estimateMacros({base64, mediaType, description}) → foto e/o testo (almeno uno dei due), il testo integra/sostituisce la foto come contesto per Claude; estimateKcalForActivity(activity, durationMin, distanceKm, profile) → Claude testuale, stima kcal via MET usando il profilo utente se disponibile (altrimenti adulto medio ~70kg)
 js/profile.js      getProfile(uid) / saveProfile(uid, fields) → users/{uid}/profile/data (peso/età/altezza/foto profilo/obiettivo giornaliero)
 js/csv-utils.js    downloadCsv(filename, rows) → export CSV lato client (Blob + <a download>), usato da gym.html e food.html
 icons/              apple-touch-icon.png (180x180), icon-512.png, favicon-32.png — generate con `sips` da un'immagine sorgente 1024x1024 fornita dall'utente, nessuna dipendenza aggiunta

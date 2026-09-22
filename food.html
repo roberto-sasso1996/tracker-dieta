@@ -81,19 +81,20 @@
       <button class="tag" data-val="Spuntino">Spuntino</button>
     </div>
 
+    <div class="field">
+      <label for="mDescription">Descrizione</label>
+      <input type="text" id="mDescription" placeholder="es. petto di pollo 200g, riso, poco olio">
+      <p style="font-size:0.76rem; color:var(--text-faint); margin-top:4px;">Facoltativa: se scrivi qui prima di analizzare, l'AI la usa insieme alla foto (o da sola, se non carichi una foto) per una stima più precisa.</p>
+    </div>
+
     <div class="photo-drop" id="photoDrop">
-      <span id="photoDropLabel">📷 Scatta o carica una foto del pasto</span>
+      <span id="photoDropLabel">📷 Aggiungi una foto (facoltativa)</span>
       <img id="photoPreview" style="display:none;">
     </div>
-    <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;">
+    <input type="file" id="photoInput" accept="image/*" style="display:none;">
 
     <button class="btn btn-sm" id="analyzeBtn" style="--accent: var(--food); width:100%; margin-bottom:14px;" disabled>Analizza con AI</button>
     <div class="ai-status" id="aiStatus" style="display:none;"><span class="spinner"></span> Analisi in corso…</div>
-
-    <div class="field">
-      <label for="mDescription">Descrizione</label>
-      <input type="text" id="mDescription" placeholder="es. Petto di pollo con riso e verdure">
-    </div>
 
     <div class="macro-grid">
       <div class="field"><label>Kcal</label><input type="number" id="mCalories" min="0"></div>
@@ -118,7 +119,7 @@
 import { requireAuth } from "./js/auth.js";
 import { db } from "./js/firebase-init.js";
 import { collection, addDoc, deleteDoc, doc, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { estimateMacrosFromPhoto, hasApiKey } from "./js/ai-vision.js";
+import { estimateMacros, hasApiKey } from "./js/ai-vision.js";
 import { compressImage } from "./js/image-utils.js";
 import { getProfile } from "./js/profile.js";
 import { downloadCsv } from "./js/csv-utils.js";
@@ -302,7 +303,7 @@ function resetForm() {
   selectedMealType = null;
   document.getElementById("photoPreview").style.display = "none";
   const label = document.getElementById("photoDropLabel");
-  label.textContent = "📷 Scatta o carica una foto del pasto";
+  label.textContent = "📷 Aggiungi una foto (facoltativa)";
   label.style.display = "block";
   document.getElementById("analyzeBtn").disabled = true;
   document.getElementById("aiStatus").style.display = "none";
@@ -326,6 +327,13 @@ document.querySelectorAll("#mealTypeTags .tag").forEach((tagBtn) => {
 
 document.getElementById("photoDrop").addEventListener("click", () => document.getElementById("photoInput").click());
 
+function updateAnalyzeBtnState() {
+  const hasDescription = document.getElementById("mDescription").value.trim().length > 0;
+  document.getElementById("analyzeBtn").disabled = !compressedPhoto && !hasDescription;
+}
+
+document.getElementById("mDescription").addEventListener("input", updateAnalyzeBtnState);
+
 document.getElementById("photoInput").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -334,7 +342,6 @@ document.getElementById("photoInput").addEventListener("change", async (e) => {
   label.textContent = "Comprimo la foto…";
   label.style.display = "block";
   document.getElementById("photoPreview").style.display = "none";
-  document.getElementById("analyzeBtn").disabled = true;
 
   try {
     compressedPhoto = await compressImage(file);
@@ -342,7 +349,7 @@ document.getElementById("photoInput").addEventListener("change", async (e) => {
     preview.src = compressedPhoto.dataUrl;
     preview.style.display = "block";
     label.style.display = "none";
-    document.getElementById("analyzeBtn").disabled = false;
+    updateAnalyzeBtnState();
   } catch (err) {
     label.textContent = "Errore nel leggere la foto, riprova.";
     console.error(err);
@@ -350,7 +357,6 @@ document.getElementById("photoInput").addEventListener("change", async (e) => {
 });
 
 document.getElementById("analyzeBtn").addEventListener("click", async () => {
-  if (!compressedPhoto) return;
   if (!hasApiKey()) {
     alert("Imposta prima la tua Anthropic API key nelle Impostazioni (dalla Home).");
     return;
@@ -360,7 +366,11 @@ document.getElementById("analyzeBtn").addEventListener("click", async () => {
   statusEl.style.display = "flex";
   btn.disabled = true;
   try {
-    const result = await estimateMacrosFromPhoto(compressedPhoto.base64, compressedPhoto.mediaType);
+    const result = await estimateMacros({
+      base64: compressedPhoto?.base64,
+      mediaType: compressedPhoto?.mediaType,
+      description: document.getElementById("mDescription").value
+    });
     document.getElementById("mDescription").value = result.description;
     document.getElementById("mCalories").value = Math.round(result.calories);
     document.getElementById("mProtein").value = Math.round(result.protein_g);
@@ -372,7 +382,7 @@ document.getElementById("analyzeBtn").addEventListener("click", async () => {
     document.getElementById("mError").style.display = "block";
   } finally {
     statusEl.style.display = "none";
-    btn.disabled = false;
+    updateAnalyzeBtnState();
   }
 });
 
