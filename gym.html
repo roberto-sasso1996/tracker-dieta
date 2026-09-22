@@ -67,7 +67,7 @@
 
     <div class="field" style="margin-top:16px; max-width:160px;">
       <label for="wTotalKcal">Kcal totali sessione</label>
-      <input type="number" id="wTotalKcal" min="0" step="1" placeholder="dal tuo orologio">
+      <input type="number" id="wTotalKcal" min="0" step="1">
     </div>
     <p style="font-size:0.78rem; color:var(--text-faint); margin-top:-10px; margin-bottom:16px;">
       Facoltativo: il totale bruciato in tutta la sessione (pesi, cardio o entrambi), letto dal tuo smartwatch. Diverso dalle kcal per singola attività cardio qui sopra.
@@ -133,6 +133,13 @@ function escapeHtml(s) {
   return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// kcal totali della sessione: se non impostate esplicitamente, somma le kcal delle attività cardio
+function sessionKcal(w) {
+  if (w.totalKcal) return w.totalKcal;
+  const cardioSum = (w.cardio || []).reduce((sum, c) => sum + (c.kcal || 0), 0);
+  return cardioSum || 0;
+}
+
 // ---------------- lista storico ----------------
 
 async function loadWorkouts() {
@@ -182,7 +189,7 @@ async function loadWorkouts() {
     const metaParts = [];
     if ((w.exercises || []).length) metaParts.push(`${w.exercises.length} esercizi`);
     if ((w.cardio || []).length) metaParts.push(`${w.cardio.length} cardio`);
-    if (w.totalKcal) metaParts.push(`${w.totalKcal} kcal totali`);
+    if (sessionKcal(w)) metaParts.push(`${sessionKcal(w)} kcal totali`);
 
     listEl.innerHTML += `
       <div class="day-group">
@@ -227,8 +234,8 @@ function openWorkoutDetail(w) {
   document.getElementById("detailTitle").textContent = dateLabel;
 
   let html = "";
-  if (w.totalKcal) {
-    html += `<div class="tile-stat" style="font-size:1.3rem; margin-bottom:2px;">${w.totalKcal}</div><div class="tile-stat-label" style="margin-bottom:12px;">kcal totali sessione</div>`;
+  if (sessionKcal(w)) {
+    html += `<div class="tile-stat" style="font-size:1.3rem; margin-bottom:2px;">${sessionKcal(w)}</div><div class="tile-stat-label" style="margin-bottom:12px;">kcal totali sessione</div>`;
   }
   (w.exercises || []).forEach((ex) => {
     let setsHtml = "";

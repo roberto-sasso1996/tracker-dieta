@@ -213,8 +213,8 @@ function openWorkoutDetail(w) {
   document.getElementById("detailTitle").textContent = dateLabel;
 
   let html = "";
-  if (w.totalKcal) {
-    html += `<div class="tile-stat" style="font-size:1.3rem; margin-bottom:2px;">${w.totalKcal}</div><div class="tile-stat-label" style="margin-bottom:12px;">kcal totali sessione</div>`;
+  if (sessionKcal(w)) {
+    html += `<div class="tile-stat" style="font-size:1.3rem; margin-bottom:2px;">${sessionKcal(w)}</div><div class="tile-stat-label" style="margin-bottom:12px;">kcal totali sessione</div>`;
   }
   (w.exercises || []).forEach((ex) => {
     let setsHtml = "";
@@ -576,7 +576,7 @@ async function loadDashboard(uid) {
         const metaParts = [];
         if ((w.exercises || []).length) metaParts.push(`${w.exercises.length} esercizi`);
         if ((w.cardio || []).length) metaParts.push(`${w.cardio.length} cardio`);
-        if (w.totalKcal) metaParts.push(`${w.totalKcal} kcal totali`);
+        if (sessionKcal(w)) metaParts.push(`${sessionKcal(w)} kcal totali`);
         workoutList.innerHTML += `
           <div class="meal-entry" data-workout-id="${w.id}" style="cursor:pointer;">
             <div class="meal-body">
@@ -654,6 +654,13 @@ function formatRelativeDate(dateStr) {
 
 function escapeHtml(s) {
   return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// kcal totali della sessione: se non impostate esplicitamente, somma le kcal delle attività cardio
+function sessionKcal(w) {
+  if (w.totalKcal) return w.totalKcal;
+  const cardioSum = (w.cardio || []).reduce((sum, c) => sum + (c.kcal || 0), 0);
+  return cardioSum || 0;
 }
 </script>
 </body>
