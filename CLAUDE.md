@@ -1,0 +1,87 @@
+# Contesto progetto — Tracker allenamenti + pasti
+
+App statica per GitHub Pages: log allenamenti/carichi in palestra + diario pasti con stima AI dei macro da foto. Vanilla HTML/CSS/JS, nessun build step, Firebase come backend.
+
+## Vincoli architetturali — leggere prima di modificare
+
+Queste sono scelte deliberate, non dimenticanze. Se sembrano subottimali, il motivo è sotto — non "correggerle" senza aver letto perché sono così, e se proprio serve cambiarle chiedi conferma prima.
+
+- **Niente build step.** Moduli ES nativi (`<script type="module">`), Firebase SDK modulare v10.14.1 importato via CDN (`gstatic.com`). Il sito va servito così com'è, file statici, direttamente da GitHub Pages.
+- **Niente Firebase Storage.** Da inizio 2026 richiede il piano Blaze (carta di credito collegata, anche se l'uso resta gratuito sotto quota). L'utente non vuole collegare una carta. Le foto dei pasti vengono quindi **compresse lato client** (`js/image-utils.js`: canvas, resize a 640px sul lato lungo, JPEG a qualità decrescente finché il risultato non sta sotto ~700KB) e salvate come **base64 dentro il documento Firestore stesso** (campo `photoData`, una data URL completa `data:image/jpeg;base64,...`). Tutto resta sul piano Spark (gratuito, nessuna carta richiesta).
+- **Stima macro AI: chiamata diretta browser → `api.anthropic.com`**, niente backend/proxy. Header `anthropic-dangerous-direct-browser-access: true` (pattern "bring your own key", ufficialmente supportato da Anthropic per questo caso d'uso). La API key Anthropic vive **solo in `localStorage`** del browser dell'utente: mai nel codice, mai nel repo. Compromesso noto e accettato: chi ha devtools aperti sullo stesso browser può leggerla dal traffico di rete — accettabile per un tool a uso personale, da NON estendere a un'app multi-utente senza mettere la key dietro un vero backend.
+  - Modello default: `claude-haiku-4-5-20251001` (economico, veloce). Alternativa esposta nelle Impostazioni: `claude-sonnet-5` (più accurato, più costoso).
+- **Auth: Firebase Authentication, solo email/password.** Nessun social login — scelta di semplicità, non un limite tecnico.
+- **Dati per utente sotto `users/{uid}/...`**, regole Firestore: solo l'utente autenticato può leggere/scrivere i propri documenti.
+
+## Stato attuale
+
+- Progetto Firebase creato: `tracker-personale-b4394` (region `eur3`).
+- Authentication → Email/Password abilitato.
+- Firestore creato, regole di sicurezza pubblicate.
+- `js/firebase-init.js` già compilato con la `firebaseConfig` reale del progetto (non è un placeholder, non serve toccarlo).
+- Storage **non** abilitato, per scelta (vedi sopra) — non riattivarlo.
+- **Non ancora fatto**: l'utente non ha ancora inserito la sua API key Anthropic nelle Impostazioni dell'app (lo farà lui dall'interfaccia, non va nel codice), non ha ancora fatto push su GitHub né attivato Pages, non c'è stato ancora un test end-to-end reale.
+
+## Struttura file
+
+```
+index.html        login/registrazione + dashboard (riepilogo giorno, tile Palestra/Pasti, sheet Impostazioni)
+gym.html           storico allenamenti + form dinamico esercizi/serie/carichi (pesi) e sessioni cardio (distanza/durata/kcal)
+food.html          diario pasti: cattura foto → compressione → analisi AI opzionale → macro editabili → salvataggio
+css/style.css      design system via CSS var: --gym (corallo) e --food (verde salvia) come accenti funzionali
+js/firebase-init.js  init Firebase + config (già compilata)
+js/auth.js         login/registrazione/logout + requireAuth() come guardia di route sulle pagine protette
+js/image-utils.js  compressImage(file) → {dataUrl, base64, mediaType, approxBytes}
+js/ai-vision.js    estimateMacrosFromPhoto(base64, mediaType) → Claude vision; estimateKcalForActivity(activity, durationMin, distanceKm, profile) → Claude testuale, stima kcal via MET usando il profilo utente se disponibile (altrimenti adulto medio ~70kg)
+js/profile.js      getProfile(uid) / saveProfile(uid, fields) → users/{uid}/profile/data (peso/età/altezza/foto profilo/obiettivo giornaliero)
+js/csv-utils.js    downloadCsv(filename, rows) → export CSV lato client (Blob + <a download>), usato da gym.html e food.html
+README.md          istruzioni di setup complete (Firebase, API key, deploy) — utili anche a te per capire il "perché"
+```
+
+Chart.js caricato via CDN (`cdn.jsdelivr.net`, UMD build pinnata a una versione) solo in `gym.html`, per il grafico di progressione carichi — stesso principio "niente build step" del resto: script tag classico, nessun bundler.
+
+## Schema dati (Firestore)
+
+```
+users/{uid}/profile/data             // documento singolo: profilo utente
+  weightKg: number
+  age: number
+  heightCm: number
+  photoData: string   // data URL base64, foto profilo compressa (stesso schema delle foto pasto)
+  dailyGoal: { calories, protein_g, carbs_g, fat_g }   // obiettivo giornaliero, opzionale, alimenta le barre di progresso
+  updatedAt: timestamp
+
+users/{uid}/workouts/{id}
+  date: "YYYY-MM-DD"
+  exercises: [{ name, sets: [{ reps, weight }] }]
+  cardio: [{ activity, distanceKm, durationMin, speedKmh, kcal }]   // speedKmh calcolata client-side da distanza/durata
+  notes: string
+  createdAt: timestamp
+
+users/{uid}/meals/{id}
+  date: "YYYY-MM-DD"
+  mealType: "Colazione" | "Pranzo" | "Cena" | "Spuntino"
+  description: string
+  photoData: string   // data URL base64, già compressa
+  macros: { calories, protein_g, carbs_g, fat_g }
+  createdAt: timestamp
+```
+
+## Prossimi step noti (non richiedono codice)
+
+1. Utente inserisce la sua API key Anthropic dalle Impostazioni dell'app, una volta online.
+2. Push del repo su GitHub (consigliato privato — `firebase-init.js` contiene la config del progetto, non segreta ma non necessario esporla).
+3. GitHub → Settings → Pages → Source: `main`, `/(root)`.
+4. Primo test end-to-end: registrazione utente, aggiunta allenamento, aggiunta pasto con foto + analisi AI.
+
+## Estensioni implementate
+
+Grafico progressione carichi per esercizio (Chart.js, in `gym.html`), obiettivo calorico/macro giornaliero con barra di progresso (`dailyGoal` nel profilo, mostrato in `food.html` e nella dashboard), export CSV dello storico (`js/csv-utils.js`, bottoni in `gym.html`/`food.html`).
+
+## Estensioni proposte ma non implementate
+
+Elencata anche nel README: PWA (manifest + service worker) per installazione da telefono.
+
+## Preferenze di stile per questo utente
+
+Risposte dirette e pratiche, tono da consulente senior, no filler teorico. Se una richiesta porta verso una scelta subottimale, segnalalo chiaramente con la motivazione invece di eseguire silenziosamente. Preferisce output completi e pronti all'uso piuttosto che snippet parziali.

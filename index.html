@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tracker</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ---------- LOGIN / REGISTRAZIONE (mostrata finché non autenticato) ---------- -->
+<div class="auth-wrap" id="authView">
+  <div class="auth-box">
+    <div class="mark">TRACKER</div>
+    <h1 id="authTitle">Accedi</h1>
+
+    <div class="field">
+      <label for="authEmail">Email</label>
+      <input type="email" id="authEmail" autocomplete="email">
+    </div>
+    <div class="field">
+      <label for="authPassword">Password</label>
+      <input type="password" id="authPassword" autocomplete="current-password">
+    </div>
+    <div class="error-msg" id="authError" style="display:none;"></div>
+    <button class="btn" id="authSubmit" style="--accent: var(--gym);">Accedi</button>
+
+    <div class="auth-switch">
+      <span id="authSwitchLabel">Prima volta qui?</span>
+      <button id="authSwitchBtn">Crea un account</button>
+    </div>
+  </div>
+</div>
+
+<!-- ---------- DASHBOARD (mostrata dopo il login) ---------- -->
+<div class="shell" id="dashView" style="display:none;">
+  <div class="topbar">
+    <div class="brand"><span class="mark">◆</span><span class="name">Tracker</span></div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <img id="avatarImg" class="avatar" style="display:none;" alt="Profilo" title="Profilo">
+      <button class="icon-btn" id="settingsBtn" title="Impostazioni">⚙</button>
+    </div>
+  </div>
+
+  <main>
+    <div class="hero">
+      <div class="eyebrow" id="todayLabel">—</div>
+      <h1>Ciao.</h1>
+    </div>
+
+    <div class="grid-2">
+      <a class="tile gym" href="gym.html">
+        <div class="tile-label">ALLENAMENTO</div>
+        <div class="tile-title">Palestra</div>
+        <div class="tile-stat" id="lastWorkoutStat">—</div>
+        <div class="tile-stat-label">ultimo allenamento</div>
+      </a>
+      <a class="tile food" href="food.html">
+        <div class="tile-label">ALIMENTAZIONE</div>
+        <div class="tile-title">Pasti</div>
+        <div class="tile-stat" id="todayCaloriesStat">—</div>
+        <div class="tile-stat-label">kcal oggi</div>
+        <div class="progress-track" id="goalProgressTrack" style="--accent: var(--food); display:none; margin-top:10px;">
+          <div class="progress-fill" id="goalProgressFill" style="width:0%;"></div>
+        </div>
+      </a>
+    </div>
+
+    <div class="section-title">Oggi</div>
+    <div id="todayMealsList"><div class="empty-state">Caricamento…</div></div>
+  </main>
+</div>
+
+<!-- ---------- SHEET IMPOSTAZIONI ---------- -->
+<div class="sheet-backdrop" id="settingsBackdrop">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2>Impostazioni</h2>
+      <button class="icon-btn" id="closeSettings">✕</button>
+    </div>
+
+    <div class="field">
+      <label>Account</label>
+      <p id="settingsEmail" style="color:var(--text-dim); font-size:0.9rem;">—</p>
+    </div>
+
+    <div class="section-title" style="margin-top:22px;">Il tuo profilo</div>
+    <div class="photo-drop" id="profilePhotoDrop">
+      <span id="profilePhotoLabel">📷 Foto profilo (opzionale)</span>
+      <img id="profilePhotoPreview" style="display:none;">
+    </div>
+    <input type="file" id="profilePhotoInput" accept="image/*" style="display:none;">
+    <div class="cardio-grid">
+      <div class="field"><label for="profileWeight">Peso kg</label><input type="number" id="profileWeight" min="0" step="0.1"></div>
+      <div class="field"><label for="profileAge">Età</label><input type="number" id="profileAge" min="0" step="1"></div>
+      <div class="field"><label for="profileHeight">Altezza cm</label><input type="number" id="profileHeight" min="0" step="1"></div>
+    </div>
+    <button class="btn btn-sm" id="saveProfileBtn" style="--accent: var(--gym); width:100%; margin-top:10px; margin-bottom:8px;">Salva profilo</button>
+    <p style="font-size:0.78rem; color:var(--text-faint); margin-bottom:20px;">
+      Usati per stime più precise (es. kcal bruciate negli allenamenti cardio).
+    </p>
+
+    <div class="section-title" style="margin-top:22px;">Obiettivo giornaliero</div>
+    <div class="macro-grid">
+      <div class="field"><label for="goalCalories">Kcal</label><input type="number" id="goalCalories" min="0" step="10"></div>
+      <div class="field"><label for="goalProtein">Prot. g</label><input type="number" id="goalProtein" min="0" step="1"></div>
+      <div class="field"><label for="goalCarbs">Carb. g</label><input type="number" id="goalCarbs" min="0" step="1"></div>
+      <div class="field"><label for="goalFat">Grassi g</label><input type="number" id="goalFat" min="0" step="1"></div>
+    </div>
+    <button class="btn btn-sm" id="saveGoalBtn" style="--accent: var(--food); width:100%; margin-bottom:8px;">Salva obiettivo</button>
+    <p style="font-size:0.78rem; color:var(--text-faint); margin-bottom:20px;">
+      Lascia vuoto un campo per non mostrare la barra di progresso per quel valore. La barra si vede in Home e nel diario Pasti.
+    </p>
+
+    <div class="section-title" style="margin-top:22px;">Stima AI dei macro</div>
+    <div class="field">
+      <label for="apiKeyInput">Anthropic API key</label>
+      <input type="password" id="apiKeyInput" placeholder="sk-ant-...">
+    </div>
+    <div class="field">
+      <label for="modelSelect">Modello</label>
+      <select id="modelSelect">
+        <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — veloce ed economico</option>
+        <option value="claude-sonnet-5">Claude Sonnet 5 — più preciso</option>
+      </select>
+    </div>
+    <button class="btn btn-sm" id="saveApiKey" style="--accent: var(--food); width:100%; margin-bottom:8px;">Salva</button>
+    <p style="font-size:0.78rem; color:var(--text-faint); margin-bottom:20px;">
+      La key resta solo su questo dispositivo (browser), non viene mai salvata su Firebase né committata nel codice.
+    </p>
+
+    <button class="btn btn-danger" id="logoutBtn">Esci</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { auth } from "./js/firebase-init.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { login, register, logout } from "./js/auth.js";
+import { setApiKey, hasApiKey } from "./js/ai-vision.js";
+import { getProfile, saveProfile } from "./js/profile.js";
+import { compressImage } from "./js/image-utils.js";
+import { db } from "./js/firebase-init.js";
+import { collection, query, where, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+const authView = document.getElementById("authView");
+const dashView = document.getElementById("dashView");
+let isRegisterMode = false;
+let currentUser = null;
+let currentProfile = null;
+let pendingProfilePhoto = null; // dataUrl compressa, solo se l'utente ha scelto una nuova foto in questa sessione dello sheet
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+// ---- auth state ----
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    currentUser = user;
+    authView.style.display = "none";
+    dashView.style.display = "flex";
+    document.getElementById("settingsEmail").textContent = user.email;
+    loadDashboard(user.uid);
+    loadProfile(user.uid);
+  } else {
+    currentUser = null;
+    currentProfile = null;
+    authView.style.display = "flex";
+    dashView.style.display = "none";
+  }
+});
+
+// ---- profilo utente ----
+let todayTotalCal = 0;
+
+async function loadProfile(uid) {
+  try {
+    currentProfile = await getProfile(uid);
+  } catch (e) {
+    console.error(e);
+    currentProfile = null;
+  }
+  const avatar = document.getElementById("avatarImg");
+  if (currentProfile?.photoData) {
+    avatar.src = currentProfile.photoData;
+    avatar.style.display = "block";
+  } else {
+    avatar.style.display = "none";
+  }
+  renderGoalProgress();
+}
+
+function renderGoalProgress() {
+  const track = document.getElementById("goalProgressTrack");
+  const fill = document.getElementById("goalProgressFill");
+  const target = currentProfile?.dailyGoal?.calories;
+  if (!target) {
+    track.style.display = "none";
+    return;
+  }
+  track.style.display = "block";
+  const pct = Math.min(100, Math.round((todayTotalCal / target) * 100));
+  fill.style.width = pct + "%";
+  fill.classList.toggle("over", todayTotalCal > target);
+}
+
+// ---- login / register form ----
+document.getElementById("authSwitchBtn").addEventListener("click", () => {
+  isRegisterMode = !isRegisterMode;
+  document.getElementById("authTitle").textContent = isRegisterMode ? "Crea account" : "Accedi";
+  document.getElementById("authSubmit").textContent = isRegisterMode ? "Registrati" : "Accedi";
+  document.getElementById("authSwitchLabel").textContent = isRegisterMode ? "Hai già un account?" : "Prima volta qui?";
+  document.getElementById("authSwitchBtn").textContent = isRegisterMode ? "Accedi" : "Crea un account";
+});
+
+document.getElementById("authSubmit").addEventListener("click", async () => {
+  const email = document.getElementById("authEmail").value.trim();
+  const password = document.getElementById("authPassword").value;
+  const errEl = document.getElementById("authError");
+  errEl.style.display = "none";
+  try {
+    if (isRegisterMode) {
+      await register(email, password);
+    } else {
+      await login(email, password);
+    }
+  } catch (e) {
+    errEl.textContent = translateAuthError(e.code || e.message);
+    errEl.style.display = "block";
+  }
+});
+
+function translateAuthError(code) {
+  const map = {
+    "auth/invalid-email": "Email non valida.",
+    "auth/user-not-found": "Utente non trovato.",
+    "auth/wrong-password": "Password errata.",
+    "auth/email-already-in-use": "Email già registrata.",
+    "auth/weak-password": "Password troppo corta (minimo 6 caratteri).",
+    "auth/invalid-credential": "Credenziali non valide."
+  };
+  return map[code] || "Errore: " + code;
+}
+
+// ---- settings sheet ----
+const settingsBackdrop = document.getElementById("settingsBackdrop");
+function openSettings() {
+  settingsBackdrop.classList.add("open");
+  const savedKey = localStorage.getItem("anthropic_api_key");
+  if (savedKey) document.getElementById("apiKeyInput").value = savedKey;
+  const savedModel = localStorage.getItem("anthropic_model");
+  if (savedModel) document.getElementById("modelSelect").value = savedModel;
+
+  pendingProfilePhoto = null;
+  document.getElementById("profileWeight").value = currentProfile?.weightKg ?? "";
+  document.getElementById("profileAge").value = currentProfile?.age ?? "";
+  document.getElementById("profileHeight").value = currentProfile?.heightCm ?? "";
+  document.getElementById("goalCalories").value = currentProfile?.dailyGoal?.calories ?? "";
+  document.getElementById("goalProtein").value = currentProfile?.dailyGoal?.protein_g ?? "";
+  document.getElementById("goalCarbs").value = currentProfile?.dailyGoal?.carbs_g ?? "";
+  document.getElementById("goalFat").value = currentProfile?.dailyGoal?.fat_g ?? "";
+  const label = document.getElementById("profilePhotoLabel");
+  const preview = document.getElementById("profilePhotoPreview");
+  if (currentProfile?.photoData) {
+    preview.src = currentProfile.photoData;
+    preview.style.display = "block";
+    label.style.display = "none";
+  } else {
+    preview.style.display = "none";
+    label.textContent = "📷 Foto profilo (opzionale)";
+    label.style.display = "block";
+  }
+}
+document.getElementById("settingsBtn").addEventListener("click", openSettings);
+document.getElementById("avatarImg").addEventListener("click", openSettings);
+document.getElementById("closeSettings").addEventListener("click", () => settingsBackdrop.classList.remove("open"));
+settingsBackdrop.addEventListener("click", (e) => { if (e.target === settingsBackdrop) settingsBackdrop.classList.remove("open"); });
+
+document.getElementById("saveApiKey").addEventListener("click", () => {
+  const key = document.getElementById("apiKeyInput").value;
+  setApiKey(key);
+  localStorage.setItem("anthropic_model", document.getElementById("modelSelect").value);
+  showToast("Impostazioni salvate");
+  settingsBackdrop.classList.remove("open");
+});
+
+// ---- foto profilo ----
+document.getElementById("profilePhotoDrop").addEventListener("click", () => document.getElementById("profilePhotoInput").click());
+document.getElementById("profilePhotoInput").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const label = document.getElementById("profilePhotoLabel");
+  const preview = document.getElementById("profilePhotoPreview");
+  label.textContent = "Comprimo la foto…";
+  label.style.display = "block";
+  preview.style.display = "none";
+  try {
+    const compressed = await compressImage(file);
+    pendingProfilePhoto = compressed.dataUrl;
+    preview.src = pendingProfilePhoto;
+    preview.style.display = "block";
+    label.style.display = "none";
+  } catch (err) {
+    label.textContent = "Errore nel leggere la foto, riprova.";
+    console.error(err);
+  }
+});
+
+document.getElementById("saveProfileBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("saveProfileBtn");
+  btn.disabled = true;
+  btn.textContent = "Salvataggio…";
+  try {
+    const weightVal = document.getElementById("profileWeight").value;
+    const ageVal = document.getElementById("profileAge").value;
+    const heightVal = document.getElementById("profileHeight").value;
+    const fields = {
+      weightKg: weightVal !== "" ? Number(weightVal) : null,
+      age: ageVal !== "" ? Number(ageVal) : null,
+      heightCm: heightVal !== "" ? Number(heightVal) : null
+    };
+    if (pendingProfilePhoto) fields.photoData = pendingProfilePhoto;
+    await saveProfile(currentUser.uid, fields);
+    currentProfile = { ...currentProfile, ...fields };
+    document.getElementById("avatarImg").src = currentProfile.photoData || "";
+    document.getElementById("avatarImg").style.display = currentProfile.photoData ? "block" : "none";
+    showToast("Profilo salvato");
+  } catch (e) {
+    showToast("Errore: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Salva profilo";
+  }
+});
+
+document.getElementById("saveGoalBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("saveGoalBtn");
+  btn.disabled = true;
+  btn.textContent = "Salvataggio…";
+  try {
+    const val = (id) => {
+      const v = document.getElementById(id).value;
+      return v !== "" ? Number(v) : null;
+    };
+    const dailyGoal = {
+      calories: val("goalCalories"),
+      protein_g: val("goalProtein"),
+      carbs_g: val("goalCarbs"),
+      fat_g: val("goalFat")
+    };
+    await saveProfile(currentUser.uid, { dailyGoal });
+    currentProfile = { ...currentProfile, dailyGoal };
+    renderGoalProgress();
+    showToast("Obiettivo salvato");
+  } catch (e) {
+    showToast("Errore: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Salva obiettivo";
+  }
+});
+
+document.getElementById("logoutBtn").addEventListener("click", logout);
+
+// ---- dashboard data ----
+async function loadDashboard(uid) {
+  document.getElementById("todayLabel").textContent = new Date().toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" });
+
+  // ultimo allenamento
+  try {
+    const wq = query(collection(db, "users", uid, "workouts"), orderBy("date", "desc"));
+    const wSnap = await getDocs(wq);
+    if (!wSnap.empty) {
+      const last = wSnap.docs[0].data();
+      document.getElementById("lastWorkoutStat").textContent = formatRelativeDate(last.date);
+    } else {
+      document.getElementById("lastWorkoutStat").textContent = "—";
+    }
+  } catch (e) { console.error(e); }
+
+  // pasti di oggi
+  try {
+    const today = todayStr();
+    const mq = query(collection(db, "users", uid, "meals"), where("date", "==", today));
+    const mSnap = await getDocs(mq);
+    const list = document.getElementById("todayMealsList");
+    if (mSnap.empty) {
+      list.innerHTML = '<div class="empty-state">Nessun pasto registrato oggi. Vai su Pasti per aggiungerne uno.</div>';
+      document.getElementById("todayCaloriesStat").textContent = "0";
+      todayTotalCal = 0;
+      renderGoalProgress();
+    } else {
+      let totalCal = 0;
+      list.innerHTML = "";
+      const docs = mSnap.docs.slice().sort((a, b) => {
+        const ta = a.data().createdAt?.toMillis?.() ?? 0;
+        const tb = b.data().createdAt?.toMillis?.() ?? 0;
+        return ta - tb;
+      });
+      docs.forEach((docSnap) => {
+        const m = docSnap.data();
+        totalCal += m.macros?.calories || 0;
+        list.innerHTML += `
+          <div class="meal-entry">
+            <img src="${m.photoData || ''}" alt="">
+            <div class="meal-body">
+              <div class="meal-type">${escapeHtml(m.mealType || '')}</div>
+              <div class="meal-desc">${escapeHtml(m.description || '')}</div>
+              <div class="meal-macros">
+                <span><b>${Math.round(m.macros?.calories || 0)}</b> kcal</span>
+                <span><b>${Math.round(m.macros?.protein_g || 0)}</b>g P</span>
+                <span><b>${Math.round(m.macros?.carbs_g || 0)}</b>g C</span>
+                <span><b>${Math.round(m.macros?.fat_g || 0)}</b>g F</span>
+              </div>
+            </div>
+          </div>`;
+      });
+      document.getElementById("todayCaloriesStat").textContent = Math.round(totalCal);
+      todayTotalCal = totalCal;
+      renderGoalProgress();
+    }
+  } catch (e) {
+    console.error(e);
+    document.getElementById("todayMealsList").innerHTML = `<div class="empty-state">Errore nel caricamento: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function formatRelativeDate(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  const diffDays = Math.round((new Date(todayStr() + "T00:00:00") - d) / 86400000);
+  if (diffDays === 0) return "Oggi";
+  if (diffDays === 1) return "Ieri";
+  return diffDays + "g fa";
+}
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pasti — Tracker</title>
+<link rel="stylesheet" href="css/style.css">
+<style>:root { --accent: var(--food); }</style>
+</head>
+<body>
+
+<div class="shell">
+  <div class="topbar">
+    <div class="brand"><span class="mark">◆</span><span class="name">Tracker</span></div>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="gym.html">Palestra</a>
+      <a href="food.html" class="active">Pasti</a>
+    </nav>
+  </div>
+
+  <main>
+    <div class="hero">
+      <div class="eyebrow" style="color:var(--food);">ALIMENTAZIONE</div>
+      <h1>Diario pasti</h1>
+    </div>
+
+    <div class="field" style="max-width:200px;">
+      <label for="dayPicker">Giorno</label>
+      <input type="date" id="dayPicker">
+    </div>
+
+    <div class="grid-2" style="margin-top:6px;">
+      <div class="tile food" style="cursor:default;">
+        <div class="tile-label">TOTALE</div>
+        <div class="tile-stat" id="sumCalories">0</div>
+        <div class="tile-stat-label">kcal</div>
+      </div>
+      <div class="tile food" style="cursor:default;">
+        <div class="tile-label">MACRO</div>
+        <div class="tile-stat" style="font-size:1rem; line-height:1.6;">
+          <span id="sumProtein">0</span>g P · <span id="sumCarbs">0</span>g C · <span id="sumFat">0</span>g F
+        </div>
+        <div class="tile-stat-label">proteine · carbo · grassi</div>
+      </div>
+    </div>
+
+    <div id="goalBlock" style="display:none; margin-top:6px;">
+      <div class="section-title" style="margin-top:22px;">Obiettivo giornaliero</div>
+      <div class="chart-card" id="goalBars"></div>
+    </div>
+
+    <div class="section-title">
+      <span>Pasti registrati</span>
+      <button class="link-btn" id="exportCsvBtn" style="color:var(--food);">⬇ Esporta CSV</button>
+    </div>
+    <div id="mealList"><div class="empty-state">Caricamento…</div></div>
+  </main>
+</div>
+
+<button class="fab" id="addBtn" style="--accent: var(--food);">+</button>
+
+<!-- ---------- SHEET: nuovo pasto ---------- -->
+<div class="sheet-backdrop" id="sheetBackdrop">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2>Nuovo pasto</h2>
+      <button class="icon-btn" id="closeSheet">✕</button>
+    </div>
+
+    <div class="tag-row" id="mealTypeTags">
+      <button class="tag" data-val="Colazione">Colazione</button>
+      <button class="tag" data-val="Pranzo">Pranzo</button>
+      <button class="tag" data-val="Cena">Cena</button>
+      <button class="tag" data-val="Spuntino">Spuntino</button>
+    </div>
+
+    <div class="photo-drop" id="photoDrop">
+      <span id="photoDropLabel">📷 Scatta o carica una foto del pasto</span>
+      <img id="photoPreview" style="display:none;">
+    </div>
+    <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;">
+
+    <button class="btn btn-sm" id="analyzeBtn" style="--accent: var(--food); width:100%; margin-bottom:14px;" disabled>Analizza con AI</button>
+    <div class="ai-status" id="aiStatus" style="display:none;"><span class="spinner"></span> Analisi in corso…</div>
+
+    <div class="field">
+      <label for="mDescription">Descrizione</label>
+      <input type="text" id="mDescription" placeholder="es. Petto di pollo con riso e verdure">
+    </div>
+
+    <div class="macro-grid">
+      <div class="field"><label>Kcal</label><input type="number" id="mCalories" min="0"></div>
+      <div class="field"><label>Prot. g</label><input type="number" id="mProtein" min="0"></div>
+      <div class="field"><label>Carb. g</label><input type="number" id="mCarbs" min="0"></div>
+      <div class="field"><label>Grassi g</label><input type="number" id="mFat" min="0"></div>
+    </div>
+
+    <div class="field">
+      <label for="mDate">Data</label>
+      <input type="date" id="mDate">
+    </div>
+
+    <div class="error-msg" id="mError" style="display:none;"></div>
+    <button class="btn" id="saveMealBtn" style="--accent: var(--food);">Salva pasto</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { requireAuth } from "./js/auth.js";
+import { db } from "./js/firebase-init.js";
+import { collection, addDoc, deleteDoc, doc, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { estimateMacrosFromPhoto, hasApiKey } from "./js/ai-vision.js";
+import { compressImage } from "./js/image-utils.js";
+import { getProfile } from "./js/profile.js";
+import { downloadCsv } from "./js/csv-utils.js";
+
+let currentUser = null;
+let currentProfile = null;
+let compressedPhoto = null; // { dataUrl, base64, mediaType, approxBytes }
+let selectedMealType = null;
+
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+requireAuth().then(async (user) => {
+  currentUser = user;
+  document.getElementById("dayPicker").value = todayStr();
+  try {
+    currentProfile = await getProfile(user.uid);
+  } catch (e) {
+    console.error(e);
+  }
+  loadDay(todayStr());
+});
+
+document.getElementById("dayPicker").addEventListener("change", (e) => loadDay(e.target.value));
+
+// ---------------- lista pasti del giorno ----------------
+
+async function loadDay(dateStr) {
+  const listEl = document.getElementById("mealList");
+  listEl.innerHTML = '<div class="empty-state">Caricamento…</div>';
+
+  let snap;
+  try {
+    const mq = query(
+      collection(db, "users", currentUser.uid, "meals"),
+      where("date", "==", dateStr)
+    );
+    snap = await getDocs(mq);
+  } catch (e) {
+    listEl.innerHTML = `<div class="empty-state">Errore nel caricamento: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+
+  let totalCal = 0, totalP = 0, totalC = 0, totalF = 0;
+
+  if (snap.empty) {
+    listEl.innerHTML = '<div class="empty-state">Nessun pasto per questo giorno.</div>';
+  } else {
+    listEl.innerHTML = "";
+    const docs = snap.docs.slice().sort((a, b) => {
+      const ta = a.data().createdAt?.toMillis?.() ?? 0;
+      const tb = b.data().createdAt?.toMillis?.() ?? 0;
+      return ta - tb;
+    });
+    docs.forEach((docSnap) => {
+      const m = docSnap.data();
+      const id = docSnap.id;
+      totalCal += m.macros?.calories || 0;
+      totalP += m.macros?.protein_g || 0;
+      totalC += m.macros?.carbs_g || 0;
+      totalF += m.macros?.fat_g || 0;
+
+      listEl.innerHTML += `
+        <div class="meal-entry">
+          <img src="${m.photoData || ''}" alt="">
+          <div class="meal-body">
+            <div class="meal-type">${escapeHtml(m.mealType || '')}</div>
+            <div class="meal-desc">${escapeHtml(m.description || '')}</div>
+            <div class="meal-macros">
+              <span><b>${Math.round(m.macros?.calories || 0)}</b> kcal</span>
+              <span><b>${Math.round(m.macros?.protein_g || 0)}</b>g P</span>
+              <span><b>${Math.round(m.macros?.carbs_g || 0)}</b>g C</span>
+              <span><b>${Math.round(m.macros?.fat_g || 0)}</b>g F</span>
+            </div>
+          </div>
+          <button class="icon-btn" data-del="${id}" title="Elimina" style="align-self:flex-start;">🗑</button>
+        </div>`;
+    });
+  }
+
+  document.getElementById("sumCalories").textContent = Math.round(totalCal);
+  document.getElementById("sumProtein").textContent = Math.round(totalP);
+  document.getElementById("sumCarbs").textContent = Math.round(totalC);
+  document.getElementById("sumFat").textContent = Math.round(totalF);
+  renderGoalProgress(totalCal, totalP, totalC, totalF);
+
+  listEl.querySelectorAll("[data-del]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Eliminare questo pasto?")) return;
+      await deleteDoc(doc(db, "users", currentUser.uid, "meals", btn.dataset.del));
+      loadDay(document.getElementById("dayPicker").value);
+    });
+  });
+}
+
+// ---------------- obiettivo giornaliero ----------------
+
+function renderGoalProgress(cal, prot, carb, fat) {
+  const goal = currentProfile?.dailyGoal;
+  const block = document.getElementById("goalBlock");
+  if (!goal || !goal.calories) {
+    block.style.display = "none";
+    return;
+  }
+  block.style.display = "block";
+
+  const rows = [
+    { label: "Kcal", value: cal, target: goal.calories, unit: "" },
+    { label: "Proteine", value: prot, target: goal.protein_g, unit: "g" },
+    { label: "Carboidrati", value: carb, target: goal.carbs_g, unit: "g" },
+    { label: "Grassi", value: fat, target: goal.fat_g, unit: "g" }
+  ].filter((r) => r.target);
+
+  document.getElementById("goalBars").innerHTML = rows.map((r) => {
+    const pct = Math.min(100, Math.round((r.value / r.target) * 100));
+    const over = r.value > r.target;
+    return `
+      <div class="progress-row">
+        <div class="progress-label"><span>${r.label}</span><span>${Math.round(r.value)}${r.unit} / ${r.target}${r.unit}</span></div>
+        <div class="progress-track"><div class="progress-fill${over ? " over" : ""}" style="width:${pct}%;"></div></div>
+      </div>`;
+  }).join("");
+}
+
+// ---------------- export CSV ----------------
+
+document.getElementById("exportCsvBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("exportCsvBtn");
+  btn.disabled = true;
+  try {
+    const mq = query(collection(db, "users", currentUser.uid, "meals"));
+    const snap = await getDocs(mq);
+    if (snap.empty) {
+      showToast("Nessun dato da esportare.");
+      return;
+    }
+    const meals = snap.docs.map((d) => d.data()).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+    const rows = [["Data", "Pasto", "Descrizione", "Kcal", "Proteine g", "Carboidrati g", "Grassi g"]];
+    meals.forEach((m) => {
+      rows.push([
+        m.date || "",
+        m.mealType || "",
+        m.description || "",
+        Math.round(m.macros?.calories || 0),
+        Math.round(m.macros?.protein_g || 0),
+        Math.round(m.macros?.carbs_g || 0),
+        Math.round(m.macros?.fat_g || 0)
+      ]);
+    });
+    downloadCsv(`pasti_${todayStr()}.csv`, rows);
+  } catch (e) {
+    showToast("Errore nell'esportazione: " + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------------- form nuovo pasto ----------------
+
+const sheetBackdrop = document.getElementById("sheetBackdrop");
+
+document.getElementById("addBtn").addEventListener("click", () => {
+  resetForm();
+  sheetBackdrop.classList.add("open");
+});
+document.getElementById("closeSheet").addEventListener("click", () => sheetBackdrop.classList.remove("open"));
+sheetBackdrop.addEventListener("click", (e) => { if (e.target === sheetBackdrop) sheetBackdrop.classList.remove("open"); });
+
+function resetForm() {
+  compressedPhoto = null;
+  selectedMealType = null;
+  document.getElementById("photoPreview").style.display = "none";
+  const label = document.getElementById("photoDropLabel");
+  label.textContent = "📷 Scatta o carica una foto del pasto";
+  label.style.display = "block";
+  document.getElementById("analyzeBtn").disabled = true;
+  document.getElementById("aiStatus").style.display = "none";
+  document.getElementById("mDescription").value = "";
+  document.getElementById("mCalories").value = "";
+  document.getElementById("mProtein").value = "";
+  document.getElementById("mCarbs").value = "";
+  document.getElementById("mFat").value = "";
+  document.getElementById("mDate").value = document.getElementById("dayPicker").value || todayStr();
+  document.getElementById("mError").style.display = "none";
+  document.querySelectorAll("#mealTypeTags .tag").forEach((t) => t.classList.remove("selected"));
+}
+
+document.querySelectorAll("#mealTypeTags .tag").forEach((tagBtn) => {
+  tagBtn.addEventListener("click", () => {
+    document.querySelectorAll("#mealTypeTags .tag").forEach((t) => t.classList.remove("selected"));
+    tagBtn.classList.add("selected");
+    selectedMealType = tagBtn.dataset.val;
+  });
+});
+
+document.getElementById("photoDrop").addEventListener("click", () => document.getElementById("photoInput").click());
+
+document.getElementById("photoInput").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const label = document.getElementById("photoDropLabel");
+  label.textContent = "Comprimo la foto…";
+  label.style.display = "block";
+  document.getElementById("photoPreview").style.display = "none";
+  document.getElementById("analyzeBtn").disabled = true;
+
+  try {
+    compressedPhoto = await compressImage(file);
+    const preview = document.getElementById("photoPreview");
+    preview.src = compressedPhoto.dataUrl;
+    preview.style.display = "block";
+    label.style.display = "none";
+    document.getElementById("analyzeBtn").disabled = false;
+  } catch (err) {
+    label.textContent = "Errore nel leggere la foto, riprova.";
+    console.error(err);
+  }
+});
+
+document.getElementById("analyzeBtn").addEventListener("click", async () => {
+  if (!compressedPhoto) return;
+  if (!hasApiKey()) {
+    alert("Imposta prima la tua Anthropic API key nelle Impostazioni (dalla Home).");
+    return;
+  }
+  const statusEl = document.getElementById("aiStatus");
+  const btn = document.getElementById("analyzeBtn");
+  statusEl.style.display = "flex";
+  btn.disabled = true;
+  try {
+    const result = await estimateMacrosFromPhoto(compressedPhoto.base64, compressedPhoto.mediaType);
+    document.getElementById("mDescription").value = result.description;
+    document.getElementById("mCalories").value = Math.round(result.calories);
+    document.getElementById("mProtein").value = Math.round(result.protein_g);
+    document.getElementById("mCarbs").value = Math.round(result.carbs_g);
+    document.getElementById("mFat").value = Math.round(result.fat_g);
+    showToast("Stima completata — controlla e correggi se serve");
+  } catch (e) {
+    document.getElementById("mError").textContent = e.message;
+    document.getElementById("mError").style.display = "block";
+  } finally {
+    statusEl.style.display = "none";
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("saveMealBtn").addEventListener("click", async () => {
+  const errEl = document.getElementById("mError");
+  errEl.style.display = "none";
+
+  if (!selectedMealType) {
+    errEl.textContent = "Seleziona il tipo di pasto.";
+    errEl.style.display = "block";
+    return;
+  }
+  const date = document.getElementById("mDate").value;
+  if (!date) {
+    errEl.textContent = "Seleziona una data.";
+    errEl.style.display = "block";
+    return;
+  }
+
+  const btn = document.getElementById("saveMealBtn");
+  btn.disabled = true;
+  btn.textContent = "Salvataggio…";
+
+  try {
+    await addDoc(collection(db, "users", currentUser.uid, "meals"), {
+      date,
+      mealType: selectedMealType,
+      description: document.getElementById("mDescription").value.trim(),
+      photoData: compressedPhoto ? compressedPhoto.dataUrl : "",
+      macros: {
+        calories: Number(document.getElementById("mCalories").value) || 0,
+        protein_g: Number(document.getElementById("mProtein").value) || 0,
+        carbs_g: Number(document.getElementById("mCarbs").value) || 0,
+        fat_g: Number(document.getElementById("mFat").value) || 0
+      },
+      createdAt: serverTimestamp()
+    });
+
+    sheetBackdrop.classList.remove("open");
+    showToast("Pasto salvato");
+    document.getElementById("dayPicker").value = date;
+    await loadDay(date);
+  } catch (e) {
+    errEl.textContent = "Errore nel salvataggio: " + e.message;
+    errEl.style.display = "block";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Salva pasto";
+  }
+});
+</script>
+</body>
+</html>
