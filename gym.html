@@ -45,7 +45,7 @@
 <div class="sheet-backdrop" id="sheetBackdrop">
   <div class="sheet">
     <div class="sheet-head">
-      <h2>Nuovo allenamento</h2>
+      <h2 id="workoutSheetTitle">Nuovo allenamento</h2>
       <button class="icon-btn" id="closeSheet">✕</button>
     </div>
 
@@ -91,6 +91,7 @@
       <button class="icon-btn" id="closeDetail">✕</button>
     </div>
     <div id="detailBody"></div>
+    <button class="btn" id="editWorkoutBtn" style="--accent: var(--gym); margin-top:16px;">✏️ Modifica allenamento</button>
   </div>
 </div>
 
@@ -99,7 +100,7 @@
 <script type="module">
 import { requireAuth } from "./js/auth.js";
 import { db } from "./js/firebase-init.js";
-import { collection, addDoc, deleteDoc, doc, query, orderBy, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { collection, addDoc, updateDoc, deleteDoc, doc, query, orderBy, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { estimateKcalForActivity, hasApiKey } from "./js/ai-vision.js";
 import { getProfile, saveProfile } from "./js/profile.js";
 import { downloadCsv } from "./js/csv-utils.js";
@@ -109,6 +110,8 @@ let currentProfile = null;
 let exerciseIdCounter = 0;
 let cardioIdCounter = 0;
 let allWorkouts = [];
+let editingWorkoutId = null; // null = nuovo allenamento, altrimenti id dell'allenamento in modifica
+let detailWorkout = null; // allenamento attualmente mostrato nello sheet di dettaglio
 
 requireAuth().then(async (user) => {
   currentUser = user;
@@ -230,6 +233,7 @@ document.getElementById("closeDetail").addEventListener("click", () => detailBac
 detailBackdrop.addEventListener("click", (e) => { if (e.target === detailBackdrop) detailBackdrop.classList.remove("open"); });
 
 function openWorkoutDetail(w) {
+  detailWorkout = w;
   const dateLabel = new Date(w.date + "T00:00:00").toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" });
   document.getElementById("detailTitle").textContent = dateLabel;
 
@@ -258,6 +262,12 @@ function openWorkoutDetail(w) {
   detailBackdrop.classList.add("open");
 }
 
+document.getElementById("editWorkoutBtn").addEventListener("click", () => {
+  if (!detailWorkout) return;
+  detailBackdrop.classList.remove("open");
+  openWorkoutForm(detailWorkout);
+});
+
 // ---------------- export CSV ----------------
 
 document.getElementById("exportCsvBtn").addEventListener("click", () => {
@@ -282,24 +292,37 @@ document.getElementById("exportCsvBtn").addEventListener("click", () => {
 // ---------------- form nuovo allenamento ----------------
 
 const sheetBackdrop = document.getElementById("sheetBackdrop");
-document.getElementById("addBtn").addEventListener("click", () => {
-  document.getElementById("wDate").value = todayStr();
+document.getElementById("addBtn").addEventListener("click", () => openWorkoutForm(null));
+document.getElementById("closeSheet").addEventListener("click", () => { sheetBackdrop.classList.remove("open"); editingWorkoutId = null; });
+sheetBackdrop.addEventListener("click", (e) => { if (e.target === sheetBackdrop) { sheetBackdrop.classList.remove("open"); editingWorkoutId = null; } });
+
+function openWorkoutForm(workout) {
+  editingWorkoutId = workout ? workout.id : null;
+  document.getElementById("workoutSheetTitle").textContent = workout ? "Modifica allenamento" : "Nuovo allenamento";
+  document.getElementById("saveWorkoutBtn").textContent = workout ? "Salva modifiche" : "Salva allenamento";
+
+  document.getElementById("wDate").value = workout?.date || todayStr();
+  document.getElementById("wTotalKcal").value = workout?.totalKcal || "";
+  document.getElementById("wNotes").value = workout?.notes || "";
+  document.getElementById("wError").style.display = "none";
   document.getElementById("exerciseContainer").innerHTML = "";
   document.getElementById("cardioContainer").innerHTML = "";
-  document.getElementById("wTotalKcal").value = "";
-  document.getElementById("wNotes").value = "";
-  document.getElementById("wError").style.display = "none";
   exerciseIdCounter = 0;
   cardioIdCounter = 0;
-  addExerciseBlock();
+
+  if (workout?.exercises?.length) {
+    workout.exercises.forEach((ex) => addExerciseBlock(ex));
+  } else {
+    addExerciseBlock();
+  }
+  (workout?.cardio || []).forEach((c) => addCardioBlock(c));
+
   sheetBackdrop.classList.add("open");
-});
-document.getElementById("closeSheet").addEventListener("click", () => sheetBackdrop.classList.remove("open"));
-sheetBackdrop.addEventListener("click", (e) => { if (e.target === sheetBackdrop) sheetBackdrop.classList.remove("open"); });
+}
 
 document.getElementById("addExerciseBtn").addEventListener("click", () => addExerciseBlock());
 
-function addExerciseBlock() {
+function addExerciseBlock(existingEx) {
   const id = "ex" + (exerciseIdCounter++);
   const container = document.getElementById("exerciseContainer");
   const block = document.createElement("div");
@@ -310,17 +333,21 @@ function addExerciseBlock() {
   const hasSaved = savedExercises.length > 0;
   const optionsHtml = savedExercises.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
 
+  const existingName = existingEx?.name || "";
+  const nameInList = existingName && savedExercises.some((n) => n.toLowerCase() === existingName.toLowerCase());
+  const useCustomInitially = existingName ? !nameInList : !hasSaved;
+
   block.innerHTML = `
     <div class="ex-head">
-      <select class="ex-name-select" ${hasSaved ? "" : "hidden"}>
+      <select class="ex-name-select" ${useCustomInitially ? "hidden" : ""}>
         <option value="">Scegli esercizio…</option>
         ${optionsHtml}
         <option value="__custom__">+ Nuovo esercizio…</option>
       </select>
-      <input type="text" class="ex-name-custom" placeholder="Nome esercizio (es. Panca piana)" ${hasSaved ? "hidden" : ""}>
+      <input type="text" class="ex-name-custom" placeholder="Nome esercizio (es. Panca piana)" value="${useCustomInitially ? escapeHtml(existingName) : ""}" ${useCustomInitially ? "" : "hidden"}>
       <button class="icon-btn ex-remove" title="Rimuovi esercizio">✕</button>
     </div>
-    <button type="button" class="link-btn ex-back-to-list" style="color:var(--gym); margin-top:-4px; margin-bottom:8px;" hidden>← Scegli dalla lista</button>
+    <button type="button" class="link-btn ex-back-to-list" style="color:var(--gym); margin-top:-4px; margin-bottom:8px;" ${hasSaved && useCustomInitially ? "" : "hidden"}>← Scegli dalla lista</button>
     <div class="sets-container"></div>
     <button class="link-btn add-set-btn" style="color:var(--gym);">+ Aggiungi serie</button>
   `;
@@ -329,6 +356,8 @@ function addExerciseBlock() {
   const select = block.querySelector(".ex-name-select");
   const customInput = block.querySelector(".ex-name-custom");
   const backBtn = block.querySelector(".ex-back-to-list");
+
+  if (existingName && !useCustomInitially) select.value = existingName;
 
   select.addEventListener("change", () => {
     if (select.value === "__custom__") {
@@ -349,18 +378,22 @@ function addExerciseBlock() {
   block.querySelector(".ex-remove").addEventListener("click", () => block.remove());
   block.querySelector(".add-set-btn").addEventListener("click", () => addSetRow(block));
 
-  addSetRow(block);
+  if (existingEx?.sets?.length) {
+    existingEx.sets.forEach((s) => addSetRow(block, s));
+  } else {
+    addSetRow(block);
+  }
 }
 
-function addSetRow(block) {
+function addSetRow(block, existingSet) {
   const setsContainer = block.querySelector(".sets-container");
   const idx = setsContainer.children.length + 1;
   const row = document.createElement("div");
   row.className = "set-input-row";
   row.innerHTML = `
     <span class="set-num">${idx}</span>
-    <input type="number" placeholder="rip." class="set-reps" inputmode="numeric" min="0">
-    <input type="number" placeholder="kg" class="set-weight" inputmode="decimal" min="0" step="0.5">
+    <input type="number" placeholder="rip." class="set-reps" inputmode="numeric" min="0" value="${existingSet ? existingSet.reps : ""}">
+    <input type="number" placeholder="kg" class="set-weight" inputmode="decimal" min="0" step="0.5" value="${existingSet ? existingSet.weight : ""}">
     <button class="set-remove" title="Rimuovi serie">✕</button>
   `;
   setsContainer.appendChild(row);
@@ -378,7 +411,7 @@ function renumberSets(setsContainer) {
 
 document.getElementById("addCardioBtn").addEventListener("click", () => addCardioBlock());
 
-function addCardioBlock() {
+function addCardioBlock(existingCardio) {
   const id = "cardio" + (cardioIdCounter++);
   const container = document.getElementById("cardioContainer");
   const block = document.createElement("div");
@@ -386,13 +419,13 @@ function addCardioBlock() {
   block.dataset.cardioId = id;
   block.innerHTML = `
     <div class="ex-head">
-      <input type="text" placeholder="Attività (es. Corsa, Nuoto, Basket, Ciclismo…)" class="cardio-activity">
+      <input type="text" placeholder="Attività (es. Corsa, Nuoto, Basket, Ciclismo…)" class="cardio-activity" value="${existingCardio ? escapeHtml(existingCardio.activity || "") : ""}">
       <button class="icon-btn cardio-remove" title="Rimuovi cardio">✕</button>
     </div>
     <div class="cardio-grid">
-      <div class="field"><label>Distanza km</label><input type="number" class="cardio-distance" inputmode="decimal" min="0" step="0.1" placeholder="se pertinente"></div>
-      <div class="field"><label>Durata min</label><input type="number" class="cardio-duration" inputmode="numeric" min="0" step="1"></div>
-      <div class="field"><label>Kcal bruciate</label><input type="number" class="cardio-kcal" inputmode="numeric" min="0" step="1"></div>
+      <div class="field"><label>Distanza km</label><input type="number" class="cardio-distance" inputmode="decimal" min="0" step="0.1" placeholder="se pertinente" value="${existingCardio?.distanceKm || ""}"></div>
+      <div class="field"><label>Durata min</label><input type="number" class="cardio-duration" inputmode="numeric" min="0" step="1" value="${existingCardio?.durationMin || ""}"></div>
+      <div class="field"><label>Kcal bruciate</label><input type="number" class="cardio-kcal" inputmode="numeric" min="0" step="1" value="${existingCardio?.kcal || ""}"></div>
     </div>
     <div class="cardio-speed" style="font-size:0.8rem; color:var(--text-dim); margin-top:6px;">Velocità media: —</div>
     <button type="button" class="link-btn cardio-estimate-btn" style="color:var(--gym); margin-top:6px;">✨ Stima kcal con AI</button>
@@ -419,6 +452,7 @@ function addCardioBlock() {
   };
   distanceInput.addEventListener("input", updateSpeed);
   durationInput.addEventListener("input", updateSpeed);
+  updateSpeed();
 
   const estimateBtn = block.querySelector(".cardio-estimate-btn");
   const statusEl = block.querySelector(".cardio-ai-status");
@@ -504,9 +538,12 @@ document.getElementById("saveWorkoutBtn").addEventListener("click", async () => 
   btn.textContent = "Salvataggio…";
 
   try {
-    await addDoc(collection(db, "users", currentUser.uid, "workouts"), {
-      date, exercises, cardio, totalKcal, notes, createdAt: serverTimestamp()
-    });
+    const payload = { date, exercises, cardio, totalKcal, notes };
+    if (editingWorkoutId) {
+      await updateDoc(doc(db, "users", currentUser.uid, "workouts", editingWorkoutId), payload);
+    } else {
+      await addDoc(collection(db, "users", currentUser.uid, "workouts"), { ...payload, createdAt: serverTimestamp() });
+    }
 
     // esercizi scritti a mano (non scelti dal menu): li aggiungo alla lista personale per la prossima volta
     const savedList = currentProfile?.exerciseList || [];
@@ -523,14 +560,14 @@ document.getElementById("saveWorkoutBtn").addEventListener("click", async () => 
     }
 
     sheetBackdrop.classList.remove("open");
-    showToast("Allenamento salvato");
+    showToast(editingWorkoutId ? "Allenamento aggiornato" : "Allenamento salvato");
     loadWorkouts();
   } catch (e) {
     errEl.textContent = "Errore nel salvataggio: " + e.message;
     errEl.style.display = "block";
   } finally {
     btn.disabled = false;
-    btn.textContent = "Salva allenamento";
+    btn.textContent = editingWorkoutId ? "Salva modifiche" : "Salva allenamento";
   }
 });
 </script>

@@ -91,7 +91,7 @@
 <div class="sheet-backdrop" id="sheetBackdrop">
   <div class="sheet">
     <div class="sheet-head">
-      <h2>Nuovo pasto</h2>
+      <h2 id="mealSheetTitle">Nuovo pasto</h2>
       <button class="icon-btn" id="closeSheet">✕</button>
     </div>
 
@@ -142,6 +142,7 @@
       <button class="icon-btn" id="closeDetail">✕</button>
     </div>
     <div id="detailBody"></div>
+    <button class="btn" id="editMealBtn" style="--accent: var(--food); margin-top:16px;">✏️ Modifica pasto</button>
   </div>
 </div>
 
@@ -150,7 +151,7 @@
 <script type="module">
 import { requireAuth } from "./js/auth.js";
 import { db } from "./js/firebase-init.js";
-import { collection, addDoc, deleteDoc, doc, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { collection, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { estimateMacros, hasApiKey } from "./js/ai-vision.js";
 import { compressImage } from "./js/image-utils.js";
 import { getProfile } from "./js/profile.js";
@@ -158,8 +159,10 @@ import { downloadCsv } from "./js/csv-utils.js";
 
 let currentUser = null;
 let currentProfile = null;
-let compressedPhoto = null; // { dataUrl, base64, mediaType, approxBytes }
+let compressedPhoto = null; // { dataUrl, base64, mediaType, approxBytes }, solo se scegli una foto NUOVA in questa sessione dello sheet
+let existingPhotoData = null; // photoData già salvata su Firestore, quando stai modificando un pasto e non hai scelto una foto nuova
 let selectedMealType = null;
+let editingMealId = null; // null = nuovo pasto, altrimenti id del pasto in modifica
 let trendRows = [];
 let trendCalChart = null;
 let trendMacroChart = null;
@@ -175,7 +178,10 @@ const detailBackdrop = document.getElementById("detailBackdrop");
 document.getElementById("closeDetail").addEventListener("click", () => detailBackdrop.classList.remove("open"));
 detailBackdrop.addEventListener("click", (e) => { if (e.target === detailBackdrop) detailBackdrop.classList.remove("open"); });
 
+let detailMeal = null;
+
 function openMealDetail(m) {
+  detailMeal = m;
   document.getElementById("detailTitle").textContent = m.mealType || "Pasto";
   document.getElementById("detailBody").innerHTML = `
     ${m.photoData ? `<img src="${m.photoData}" style="width:100%; border-radius:var(--radius-sm); margin-bottom:14px;" alt="">` : ""}
@@ -188,6 +194,12 @@ function openMealDetail(m) {
     </div>`;
   detailBackdrop.classList.add("open");
 }
+
+document.getElementById("editMealBtn").addEventListener("click", () => {
+  if (!detailMeal) return;
+  detailBackdrop.classList.remove("open");
+  openMealForm(detailMeal);
+});
 
 function showToast(msg) {
   const t = document.getElementById("toast");
@@ -463,30 +475,43 @@ document.getElementById("exportCsvBtn").addEventListener("click", async () => {
 
 const sheetBackdrop = document.getElementById("sheetBackdrop");
 
-document.getElementById("addBtn").addEventListener("click", () => {
-  resetForm();
-  sheetBackdrop.classList.add("open");
-});
-document.getElementById("closeSheet").addEventListener("click", () => sheetBackdrop.classList.remove("open"));
-sheetBackdrop.addEventListener("click", (e) => { if (e.target === sheetBackdrop) sheetBackdrop.classList.remove("open"); });
+document.getElementById("addBtn").addEventListener("click", () => openMealForm(null));
+document.getElementById("closeSheet").addEventListener("click", () => { sheetBackdrop.classList.remove("open"); editingMealId = null; });
+sheetBackdrop.addEventListener("click", (e) => { if (e.target === sheetBackdrop) { sheetBackdrop.classList.remove("open"); editingMealId = null; } });
 
-function resetForm() {
+function openMealForm(meal) {
+  editingMealId = meal ? meal.id : null;
+  document.getElementById("mealSheetTitle").textContent = meal ? "Modifica pasto" : "Nuovo pasto";
+  document.getElementById("saveMealBtn").textContent = meal ? "Salva modifiche" : "Salva pasto";
+
   compressedPhoto = null;
-  selectedMealType = null;
-  document.getElementById("photoPreview").style.display = "none";
+  existingPhotoData = meal?.photoData || null;
+  selectedMealType = meal?.mealType || null;
+
   const label = document.getElementById("photoDropLabel");
-  label.textContent = "📷 Aggiungi una foto (facoltativa)";
-  label.style.display = "block";
-  document.getElementById("analyzeBtn").disabled = true;
+  const preview = document.getElementById("photoPreview");
+  if (existingPhotoData) {
+    preview.src = existingPhotoData;
+    preview.style.display = "block";
+    label.style.display = "none";
+  } else {
+    preview.style.display = "none";
+    label.textContent = "📷 Aggiungi una foto (facoltativa)";
+    label.style.display = "block";
+  }
+
   document.getElementById("aiStatus").style.display = "none";
-  document.getElementById("mDescription").value = "";
-  document.getElementById("mCalories").value = "";
-  document.getElementById("mProtein").value = "";
-  document.getElementById("mCarbs").value = "";
-  document.getElementById("mFat").value = "";
-  document.getElementById("mDate").value = document.getElementById("dayPicker").value || todayStr();
+  document.getElementById("mDescription").value = meal?.description || "";
+  document.getElementById("mCalories").value = meal?.macros?.calories ?? "";
+  document.getElementById("mProtein").value = meal?.macros?.protein_g ?? "";
+  document.getElementById("mCarbs").value = meal?.macros?.carbs_g ?? "";
+  document.getElementById("mFat").value = meal?.macros?.fat_g ?? "";
+  document.getElementById("mDate").value = meal?.date || document.getElementById("dayPicker").value || todayStr();
   document.getElementById("mError").style.display = "none";
-  document.querySelectorAll("#mealTypeTags .tag").forEach((t) => t.classList.remove("selected"));
+  document.querySelectorAll("#mealTypeTags .tag").forEach((t) => t.classList.toggle("selected", t.dataset.val === selectedMealType));
+  updateAnalyzeBtnState();
+
+  sheetBackdrop.classList.add("open");
 }
 
 document.querySelectorAll("#mealTypeTags .tag").forEach((tagBtn) => {
@@ -579,22 +604,27 @@ document.getElementById("saveMealBtn").addEventListener("click", async () => {
   btn.textContent = "Salvataggio…";
 
   try {
-    await addDoc(collection(db, "users", currentUser.uid, "meals"), {
+    const payload = {
       date,
       mealType: selectedMealType,
       description: document.getElementById("mDescription").value.trim(),
-      photoData: compressedPhoto ? compressedPhoto.dataUrl : "",
+      photoData: compressedPhoto ? compressedPhoto.dataUrl : (existingPhotoData || ""),
       macros: {
         calories: Number(document.getElementById("mCalories").value) || 0,
         protein_g: Number(document.getElementById("mProtein").value) || 0,
         carbs_g: Number(document.getElementById("mCarbs").value) || 0,
         fat_g: Number(document.getElementById("mFat").value) || 0
-      },
-      createdAt: serverTimestamp()
-    });
+      }
+    };
+
+    if (editingMealId) {
+      await updateDoc(doc(db, "users", currentUser.uid, "meals", editingMealId), payload);
+    } else {
+      await addDoc(collection(db, "users", currentUser.uid, "meals"), { ...payload, createdAt: serverTimestamp() });
+    }
 
     sheetBackdrop.classList.remove("open");
-    showToast("Pasto salvato");
+    showToast(editingMealId ? "Pasto aggiornato" : "Pasto salvato");
     document.getElementById("dayPicker").value = date;
     await loadDay(date);
     refreshTrend();
@@ -603,7 +633,7 @@ document.getElementById("saveMealBtn").addEventListener("click", async () => {
     errEl.style.display = "block";
   } finally {
     btn.disabled = false;
-    btn.textContent = "Salva pasto";
+    btn.textContent = editingMealId ? "Salva modifiche" : "Salva pasto";
   }
 });
 </script>
