@@ -84,9 +84,9 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown e senza testo aggiuntiv
       "anthropic-version": "2023-06-01",
       "anthropic-dangerous-direct-browser-access": "true"
     },
-    body: JSON.stringify({
+        body: JSON.stringify({
       model: getModel(),
-      max_tokens: 400,
+      max_tokens: 1024,
       messages: [{ role: "user", content }]
     })
   });
@@ -98,7 +98,11 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown e senza testo aggiuntiv
 
   const data = await response.json();
   const textBlock = (data.content || []).find((b) => b.type === "text");
-  if (!textBlock) throw new Error("Risposta AI senza contenuto testuale.");
+  if (!textBlock) {
+    const blockTypes = (data.content || []).map((b) => b.type).join(", ") || "nessuno";
+    throw new Error(`Risposta AI senza testo (stop_reason: ${data.stop_reason}, blocchi: ${blockTypes}).`);
+  }
+
 
   let cleaned = textBlock.text.trim().replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
 
