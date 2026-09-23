@@ -1,19 +1,18 @@
 // ============================================================
-// Stima macro da foto pasto usando l'API Claude (Anthropic) vision.
+// Stima macro/kcal usando l'API Claude (Anthropic) vision + testo.
 //
 // Chiamata diretta dal browser: l'API Anthropic supporta CORS per
 // chi imposta l'header "anthropic-dangerous-direct-browser-access".
-// Questo è pensato esplicitamente per pattern "bring your own key"
-// come questo: la key resta SOLO nel localStorage del tuo browser,
-// non viene mai committata nel repo né inviata a un tuo server.
+// Pattern "bring your own key": la key resta SOLO nel localStorage
+// del tuo browser, mai committata nel repo né inviata a un server tuo.
 //
-// Limite da conoscere: chiunque apra devtools sul TUO browser può
-// leggere la key dalle richieste di rete. Per un tool personale va
-// bene; non è adatto a un'app pubblica multi-utente con la tua key.
+// Limite noto: chiunque apra devtools sul TUO browser può leggere
+// la key dalle richieste di rete. Ok per uso personale, non per
+// un'app pubblica multi-utente con la tua key.
 // ============================================================
 
 const API_URL = "https://api.anthropic.com/v1/messages";
-const DEFAULT_MODEL = "claude-haiku-4-5-20251001"; // veloce ed economico, adatto a chiamate frequenti
+const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 
 function getApiKey() {
   return localStorage.getItem("anthropic_api_key") || "";
@@ -36,20 +35,60 @@ export function setModel(model) {
 }
 
 /**
- * Stima i macro di un pasto da una foto, da una descrizione testuale, o da entrambe
- * insieme: se ci sono sia foto che testo, il testo viene usato come contesto aggiuntivo
- * per affinare la lettura della foto (quantità, ingredienti non visibili, condimenti...).
- * Serve almeno uno dei due.
- * @param {{base64?:string, mediaType?:string, description?:string}} input
- *   base64/mediaType: foto già compressa da image-utils.js (opzionale)
- *   description: testo scritto dall'utente (opzionale)
- * @returns {Promise<{description:string, calories:number, protein_g:number, carbs_g:number, fat_g:number}>}
+ * Chiamata Claude condivisa: fetch, gestione errori HTTP, estrazione del
+ * blocco di testo e parsing JSON. Usata da entrambe le funzioni sotto,
+ * così un fix qui vale per tutte le chiamate AI dell'app.
+ * Se manca il blocco di testo, l'errore mostra stop_reason e i tipi di
+ * blocco ricevuti invece di un messaggio generico — se ricapita, quel
+ * dettaglio dice esattamente cosa sta succedendo.
  */
-export async function estimateMacros({ base64, mediaType, description } = {}) {
+async function callClaude(content, maxTokens) {
   const apiKey = getApiKey();
   if (!apiKey) {
     throw new Error("Nessuna API key Anthropic impostata. Aprine una nelle Impostazioni.");
   }
+
+  const response = await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
+    body: JSON.stringify({
+      model: getModel(),
+      max_tokens: maxTokens,
+      messages: [{ role: "user", content }]
+    })
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text().catch(() => "");
+    throw new Error(`Errore API Claude (${response.status}): ${errBody.slice(0, 200)}`);
+  }
+
+  const data = await response.json();
+  const textBlock = (data.content || []).find((b) => b.type === "text");
+  if (!textBlock) {
+    const blockTypes = (data.content || []).map((b) => b.type).join(", ") || "nessuno";
+    throw new Error(`Risposta AI senza testo (stop_reason: ${data.stop_reason}, blocchi: ${blockTypes}).`);
+  }
+
+  const cleaned = textBlock.text.trim().replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    throw new Error(`La risposta AI non era JSON valido: "${cleaned.slice(0, 150)}"`);
+  }
+}
+
+/**
+ * Stima i macro di un pasto da foto, descrizione testuale, o entrambe insieme.
+ * @param {{base64?:string, mediaType?:string, description?:string}} input
+ * @returns {Promise<{description:string, calories:number, protein_g:number, carbs_g:number, fat_g:number}>}
+ */
+export async function estimateMacros({ base64, mediaType, description } = {}) {
   const text = (description || "").trim();
   if (!base64 && !text) {
     throw new Error("Aggiungi una foto o scrivi una descrizione del pasto prima di analizzare.");
@@ -76,42 +115,7 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown e senza testo aggiuntiv
     ? [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: prompt }]
     : prompt;
 
-  const response = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true"
-    },
-        body: JSON.stringify({
-      model: getModel(),
-      max_tokens: 1024,
-      messages: [{ role: "user", content }]
-    })
-  });
-
-  if (!response.ok) {
-    const errBody = await response.text().catch(() => "");
-    throw new Error(`Errore API Claude (${response.status}): ${errBody.slice(0, 200)}`);
-  }
-
-  const data = await response.json();
-  const textBlock = (data.content || []).find((b) => b.type === "text");
-  if (!textBlock) {
-    const blockTypes = (data.content || []).map((b) => b.type).join(", ") || "nessuno";
-    throw new Error(`Risposta AI senza testo (stop_reason: ${data.stop_reason}, blocchi: ${blockTypes}).`);
-  }
-
-
-  let cleaned = textBlock.text.trim().replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
-
-  let parsed;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    throw new Error("La risposta AI non era JSON valido. Puoi inserire i macro manualmente.");
-  }
+  const parsed = await callClaude(content, 1024);
 
   return {
     description: parsed.description || "",
@@ -123,21 +127,14 @@ Rispondi SOLO con un oggetto JSON valido, senza markdown e senza testo aggiuntiv
 }
 
 /**
- * Stima le kcal bruciate in una sessione sportiva, dato tipo di attività e durata.
- * Se viene passato un profilo (peso/età/altezza, da js/profile.js) la stima usa
- * quei dati reali per il calcolo MET; altrimenti assume un adulto medio ~70kg.
- * @param {string} activity - es. "Corsa", "Nuoto", "Basket"
- * @param {number} durationMin - durata in minuti
- * @param {number} [distanceKm] - distanza percorsa in km, se pertinente/disponibile
- * @param {{weightKg?:number, age?:number, heightCm?:number}} [profile] - dati utente, se disponibili
+ * Stima le kcal bruciate in una sessione sportiva.
+ * @param {string} activity
+ * @param {number} durationMin
+ * @param {number} [distanceKm]
+ * @param {{weightKg?:number, age?:number, heightCm?:number}} [profile]
  * @returns {Promise<number>} kcal stimate
  */
 export async function estimateKcalForActivity(activity, durationMin, distanceKm, profile) {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    throw new Error("Nessuna API key Anthropic impostata. Aprine una nelle Impostazioni.");
-  }
-
   const personLine = profile?.weightKg
     ? `Persona: peso ${profile.weightKg}kg${profile.age ? `, età ${profile.age} anni` : ""}${profile.heightCm ? `, altezza ${profile.heightCm}cm` : ""}.`
     : `Persona: dati non disponibili, usa una stima per un adulto medio di circa 70kg.`;
@@ -150,38 +147,6 @@ ${distanceKm ? `Distanza percorsa: ${distanceKm} km` : ""}
 Usa i valori MET tipici per questo tipo di attività e intensità media, moltiplicati per il peso corporeo indicato. Rispondi SOLO con un oggetto JSON valido, senza markdown e senza testo aggiuntivo, in questo formato esatto:
 {"kcal": numero_kcal_stimato}`;
 
-  const response = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true"
-    },
-    body: JSON.stringify({
-      model: getModel(),
-      max_tokens: 100,
-      messages: [{ role: "user", content: prompt }]
-    })
-  });
-
-  if (!response.ok) {
-    const errBody = await response.text().catch(() => "");
-    throw new Error(`Errore API Claude (${response.status}): ${errBody.slice(0, 200)}`);
-  }
-
-  const data = await response.json();
-  const textBlock = (data.content || []).find((b) => b.type === "text");
-  if (!textBlock) throw new Error("Risposta AI senza contenuto testuale.");
-
-  let cleaned = textBlock.text.trim().replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
-
-  let parsed;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    throw new Error("La risposta AI non era JSON valido. Puoi inserire le kcal manualmente.");
-  }
-
+  const parsed = await callClaude(prompt, 300);
   return Number(parsed.kcal) || 0;
 }
