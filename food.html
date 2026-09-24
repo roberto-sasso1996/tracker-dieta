@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="css/style.css">
 <style>:root { --accent: var(--food); }</style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -79,7 +80,7 @@
 
     <div class="section-title">
       <span>Pasti registrati</span>
-      <button class="link-btn" id="exportCsvBtn" style="color:var(--food);">⬇ Esporta CSV</button>
+      <button class="link-btn" id="exportCsvBtn" style="color:var(--food);">⬇ Esporta Excel</button>
     </div>
     <div id="mealList"><div class="empty-state">Caricamento…</div></div>
   </main>
@@ -155,7 +156,7 @@ import { collection, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, s
 import { estimateMacros, hasApiKey } from "./js/ai-vision.js";
 import { compressImage } from "./js/image-utils.js";
 import { getProfile } from "./js/profile.js";
-import { downloadCsv } from "./js/csv-utils.js";
+import { downloadCsv, downloadBlob } from "./js/csv-utils.js";
 
 let currentUser = null;
 let currentProfile = null;
@@ -438,7 +439,7 @@ function renderGoalProgress(cal, prot, carb, fat) {
   }).join("");
 }
 
-// ---------------- export CSV ----------------
+// ---------------- export Excel (con riga di riepilogo colorata a fine giorno) ----------------
 
 document.getElementById("exportCsvBtn").addEventListener("click", async () => {
   const btn = document.getElementById("exportCsvBtn");
@@ -451,19 +452,64 @@ document.getElementById("exportCsvBtn").addEventListener("click", async () => {
       return;
     }
     const meals = snap.docs.map((d) => d.data()).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-    const rows = [["Data", "Pasto", "Descrizione", "Kcal", "Proteine g", "Carboidrati g", "Grassi g"]];
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Pasti");
+    sheet.columns = [
+      { header: "Data", key: "date", width: 12 },
+      { header: "Pasto", key: "mealType", width: 14 },
+      { header: "Descrizione", key: "description", width: 40 },
+      { header: "Kcal", key: "calories", width: 10 },
+      { header: "Proteine g", key: "protein_g", width: 12 },
+      { header: "Carboidrati g", key: "carbs_g", width: 14 },
+      { header: "Grassi g", key: "fat_g", width: 10 }
+    ];
+    const headerRow = sheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF5FBF8F" } };
+
+    let currentDate = null;
+    let dayTotals = { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
+
+    const pushDayTotalRow = (dateStr) => {
+      const row = sheet.addRow({
+        date: dateStr,
+        mealType: "TOTALE GIORNO",
+        description: "",
+        calories: Math.round(dayTotals.calories),
+        protein_g: Math.round(dayTotals.protein_g),
+        carbs_g: Math.round(dayTotals.carbs_g),
+        fat_g: Math.round(dayTotals.fat_g)
+      });
+      row.font = { bold: true };
+      row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD7F2E3" } };
+    };
+
     meals.forEach((m) => {
-      rows.push([
-        m.date || "",
-        m.mealType || "",
-        m.description || "",
-        Math.round(m.macros?.calories || 0),
-        Math.round(m.macros?.protein_g || 0),
-        Math.round(m.macros?.carbs_g || 0),
-        Math.round(m.macros?.fat_g || 0)
-      ]);
+      if (currentDate !== null && m.date !== currentDate) {
+        pushDayTotalRow(currentDate);
+        dayTotals = { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
+      }
+      currentDate = m.date;
+      sheet.addRow({
+        date: m.date || "",
+        mealType: m.mealType || "",
+        description: m.description || "",
+        calories: Math.round(m.macros?.calories || 0),
+        protein_g: Math.round(m.macros?.protein_g || 0),
+        carbs_g: Math.round(m.macros?.carbs_g || 0),
+        fat_g: Math.round(m.macros?.fat_g || 0)
+      });
+      dayTotals.calories += m.macros?.calories || 0;
+      dayTotals.protein_g += m.macros?.protein_g || 0;
+      dayTotals.carbs_g += m.macros?.carbs_g || 0;
+      dayTotals.fat_g += m.macros?.fat_g || 0;
     });
-    downloadCsv(`pasti_${todayStr()}.csv`, rows);
+    if (currentDate !== null) pushDayTotalRow(currentDate);
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    downloadBlob(`pasti_${todayStr()}.xlsx`, blob);
   } catch (e) {
     showToast("Errore nell'esportazione: " + e.message);
   } finally {

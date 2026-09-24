@@ -123,7 +123,7 @@ users/{uid}/meals/{id}
 - **Profilo utente**: peso, età, altezza e foto profilo, impostabili dalla Home → Impostazioni. Alimentano le stime AI (es. kcal bruciate) per risultati più precisi.
 - **Obiettivo calorico/macro giornaliero**: impostabile in Home → Impostazioni; la pagina Pasti (e la dashboard, per le kcal) mostrano una barra di progresso rispetto al consumato del giorno.
 - **Andamento pasti**: nella pagina Pasti, grafici (Chart.js via CDN) di kcal e macro totali per giorno sugli ultimi 10/20/30/60 giorni, con export CSV aggregato per giorno.
-- **Export CSV**: dalle pagine Palestra e Pasti puoi scaricare l'intero storico in CSV (esclude le foto, che restano solo su Firestore).
+- **Export storico**: da Palestra puoi scaricare l'intero storico allenamenti in CSV. Da Pasti, l'export "Pasti registrati" scarica un file **Excel (.xlsx)** — non CSV — con una riga colorata di riepilogo (data + somma di kcal/proteine/carboidrati/grassi) alla fine di ogni giorno; è .xlsx e non .csv proprio perché un CSV non può contenere colori. L'export "Andamento" invece resta CSV (è già un dato aggregato per giorno). In tutti i casi le foto restano solo su Firestore, escluse dall'export.
 - **Dashboard con dettaglio**: la Home mostra allenamento e pasti di oggi; cliccando una card si apre un pop-up con tutti i dettagli. La lista di ogni pagina (Palestra, Pasti) si aggiorna subito dopo ogni aggiunta o eliminazione.
 
 ## 6. Possibili estensioni (non incluse)

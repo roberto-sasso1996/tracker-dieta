@@ -34,12 +34,14 @@ js/auth.js         login/registrazione/logout + requireAuth() come guardia di ro
 js/image-utils.js  compressImage(file) → {dataUrl, base64, mediaType, approxBytes}
 js/ai-vision.js    estimateMacros({base64, mediaType, description}) → foto e/o testo (almeno uno dei due), il testo integra/sostituisce la foto come contesto per Claude; estimateKcalForActivity(activity, durationMin, distanceKm, profile) → Claude testuale, stima kcal via MET usando il profilo utente se disponibile (altrimenti adulto medio ~70kg)
 js/profile.js      getProfile(uid) / saveProfile(uid, fields) → users/{uid}/profile/data (peso/età/altezza/foto profilo/obiettivo giornaliero/elenco esercizi personalizzato)
-js/csv-utils.js    downloadCsv(filename, rows) → export CSV lato client (Blob + <a download>), usato da gym.html e food.html
+js/csv-utils.js    downloadBlob(filename, blob) / downloadCsv(filename, rows) → export lato client (Blob + <a download>), usato da gym.html e food.html. L'export xlsx (Excel) in food.html usa direttamente downloadBlob con il buffer prodotto da ExcelJS, non downloadCsv
 icons/              apple-touch-icon.png (180x180), icon-512.png, favicon-32.png — generate con `sips` da un'immagine sorgente 1024x1024 fornita dall'utente, nessuna dipendenza aggiunta
 README.md          istruzioni di setup complete (Firebase, API key, deploy) — utili anche a te per capire il "perché"
 ```
 
 Chart.js caricato via CDN (`cdn.jsdelivr.net`, UMD build pinnata a una versione) solo in `food.html` (sezione Andamento) — stesso principio "niente build step" del resto: script tag classico, nessun bundler. Rimosso da `gym.html` su richiesta esplicita dell'utente (il grafico di progressione carichi per esercizio non c'è più).
+
+ExcelJS caricato via CDN (`cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js`, stesso pattern) solo in `food.html`, esclusivamente per l'export "Pasti registrati" → `.xlsx`. **Motivo**: l'utente voleva una riga colorata di riepilogo a fine di ogni giorno nell'export — impossibile in CSV (formato testo puro, nessun concetto di colore/stile), quindi quell'unico export è passato da `.csv` a `.xlsx` per poterlo fare davvero. L'export "Andamento" resta `.csv` via `downloadCsv` (già un dato aggregato per giorno, non serve la riga di riepilogo). Se l'utente chiede di nuovo un CSV "con colori" altrove, è lo stesso problema — o Excel, o niente colore.
 
 ## Schema dati (Firestore)
 
@@ -79,7 +81,7 @@ users/{uid}/meals/{id}
 
 ## Estensioni implementate
 
-Obiettivo calorico/macro giornaliero con barra di progresso (`dailyGoal` nel profilo, mostrato in `food.html` e nella dashboard), export CSV dello storico (`js/csv-utils.js`, bottoni in `gym.html`/`food.html`), dashboard con allenamento+pasti di oggi (`index.html`), sezione Andamento in `food.html` con grafici kcal/macro per periodo (10/20/30/60gg) ed export CSV aggregato per giorno.
+Obiettivo calorico/macro giornaliero con barra di progresso (`dailyGoal` nel profilo, mostrato in `food.html` e nella dashboard), export dello storico (`js/csv-utils.js` + ExcelJS, bottoni in `gym.html`/`food.html` — vedi sopra per quale pagina usa cosa), dashboard con allenamento+pasti di oggi (`index.html`), sezione Andamento in `food.html` con grafici kcal/macro per periodo (10/20/30/60gg) ed export CSV aggregato per giorno.
 
 **Esercizi personalizzati** (`gym.html` + Impostazioni in `index.html`): in "Nuovo allenamento" il nome esercizio è un `<select>` popolato da `currentProfile.exerciseList`, con opzione "+ Nuovo esercizio…" che rivela un input di testo libero (toggle `select`/`input` via proprietà `.hidden`, non `style.display` — mai mischiare i due sullo stesso elemento, l'inline style vince sempre sull'attributo `hidden` e lo rende inefficace). Un nome scritto a mano viene aggiunto automaticamente a `exerciseList` al salvataggio dell'allenamento (dedup case-insensitive), così la prossima volta compare nel menu senza bisogno di passare da Impostazioni. La sezione "I tuoi esercizi" in Impostazioni permette di rinominare (inline, salva su blur) o eliminare voci esistenti, e di aggiungerne di nuove direttamente.
 
